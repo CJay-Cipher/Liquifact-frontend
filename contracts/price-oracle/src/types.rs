@@ -369,4 +369,3 @@ pub struct ProposedAction {
     /// Whether the action has been cancelled.
     pub cancelled: bool,
 }
-
