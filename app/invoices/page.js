@@ -1,8 +1,9 @@
-import Link from "next/link";
-import ErrorBanner from "../../components/ErrorBanner";
+'use client';
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
+import { copy } from '../copy/en';
+import { useToast } from '../../components/ToastProvider';
 
 /**
  * FILE_CONSTRAINTS
@@ -68,11 +69,11 @@ function FileConstraintNotice() {
  * Validates file type and size client-side and surfaces errors immediately.
  */
 function UploadZone() {
+  const toast = useToast();
   const inputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState(null);
   const [error, setError] = useState(null);
-  const [submitted, setSubmitted] = useState(false);
 
   function validate(f) {
     if (!f) return 'No file selected.';
@@ -87,7 +88,6 @@ function UploadZone() {
   }
 
   function handleFile(f) {
-    setSubmitted(false);
     const err = validate(f);
     if (err) {
       setError(err);
@@ -113,8 +113,12 @@ function UploadZone() {
   function handleSubmit(e) {
     e.preventDefault();
     if (!file) return;
+
     // TODO: wire to real upload endpoint — see follow-up backend issue.
-    setSubmitted(true);
+    toast.success(
+      'Invoice queued for tokenization. Blockchain confirmation pending.',
+      'Upload queued',
+    );
   }
 
   function handleKeyDown(e) {
@@ -196,18 +200,6 @@ function UploadZone() {
         </p>
       )}
 
-      {/* Success stub */}
-      {submitted && (
-        <p
-          role="status"
-          aria-live="polite"
-          className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400"
-        >
-          <span aria-hidden="true">🚀</span>
-          Invoice queued for tokenization. Blockchain confirmation pending.
-          <span className="text-slate-500 ml-1">(stub — backend TBD)</span>
-        </p>
-      )}
 
       {/* Submit CTA */}
       <button
@@ -252,8 +244,9 @@ export default function InvoicesPage() {
         <p className="text-slate-400 mb-8">
           {copy.invoices.subtext}
         </p>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-8 text-center text-slate-500">
-          {copy.invoices.emptyState}
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-8">
+          <FileConstraintNotice />
+          <UploadZone />
         </div>
       </main>
     </div>

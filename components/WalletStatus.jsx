@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useToast } from './ToastProvider';
 
 // Wallet connection states
 const WALLET_STATES = {
@@ -23,6 +24,7 @@ export default function WalletStatus() {
   const [walletState, setWalletState] = useState(WALLET_STATES.DISCONNECTED);
   const [walletData, setWalletData] = useState(null);
   const [error, setError] = useState(null);
+  const toast = useToast();
 
   const connectWallet = async () => {
     setWalletState(WALLET_STATES.CONNECTING);
@@ -38,14 +40,17 @@ export default function WalletStatus() {
         case 'success':
           setWalletState(WALLET_STATES.CONNECTED);
           setWalletData(mockWalletData);
+          toast.success('Wallet connected successfully.', 'Wallet connected');
           break;
         case 'error':
           setWalletState(WALLET_STATES.ERROR);
           setError('Failed to connect to wallet. Please try again.');
+          toast.error('Failed to connect to wallet. Please try again.', 'Connection failed');
           break;
         case 'wrong_network':
           setWalletState(WALLET_STATES.WRONG_NETWORK);
           setError('Wallet is connected to testnet. Please switch to public network.');
+          toast.error('Wallet is connected to testnet. Please switch to public network.', 'Wrong network');
           break;
       }
     }, 1500);

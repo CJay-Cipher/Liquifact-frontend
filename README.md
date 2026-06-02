@@ -45,6 +45,7 @@ Part of the LiquiFact stack: **frontend** (this repo) | **backend** (Express API
 | `npm run build` | Production build           |
 | `npm run start` | Start production server   |
 | `npm run lint`  | Run ESLint                 |
+| `npm run test:e2e` | Run Playwright smoke tests |
 
 Default: [http://localhost:3000](http://localhost:3000). The home page can check API health at `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`).
 
