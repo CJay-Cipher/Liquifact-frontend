@@ -37,6 +37,14 @@ Part of the LiquiFact stack: **frontend** (this repo) | **backend** (Express API
 
 ---
 
+## API Integration
+
+For frontend/backend contract details see:
+
+[docs/api-integration.md](docs/api-integration.md)
+
+---
+
 ## Development
 
 | Command         | Description                |
