@@ -1129,58 +1129,7 @@ impl PriceOracle {
         if crate::auth::_is_halted(&env) {
             panic_with_error!(&env, ContractError::EmergencyHalted);
         }
-        if components.is_empty() {
-            return Err(ContractError::AssetNotFound);
-        }
-
-        let mut total_weighted_price: i128 = 0;
-        let mut total_weight: u32 = 0;
-
-        for component in components.iter() {
-            // Boundary check (issue #278): reject uninitialized asset pairs before
-            // entering the calculation loop to prevent runtime errors on stale slots.
-            if !env
-                .storage()
-                .persistent()
-                .has(&DataKey::TrackedAsset(component.asset.clone()))
-            {
-                return Err(ContractError::AssetNotFound);
-            }
-
-            // Reject zero-weight components to avoid silently skewing the index.
-            if component.weight == 0 {
-                return Err(ContractError::InvalidWeight);
-            }
-
-            // Fetch the verified price.
-            // If any asset is missing or stale, this cleanly propagates ContractError::AssetNotFound.
-            let price_data = Self::get_price(env.clone(), component.asset.clone(), true)?;
-
-            let weight_i128: i128 = component.weight.into();
-
-            // Safe math to prevent overflow panics
-            let weighted_val = price_data
-                .price
-                .checked_mul(weight_i128)
-                .ok_or(ContractError::InvalidPrice)?;
-
-            total_weighted_price = total_weighted_price
-                .checked_add(weighted_val)
-                .ok_or(ContractError::InvalidPrice)?;
-
-            total_weight = total_weight
-                .checked_add(component.weight)
-                .unwrap_or(total_weight);
-        }
-
-        if total_weight == 0 {
-            return Err(ContractError::InvalidWeight);
-        }
-
-        // Calculate final index price.
-        // Because all stored prices are 9-decimal normalized, the division preserves the 9-decimal standard.
-        let index_price = total_weighted_price.checked_div(total_weight as i128).ok_or(ContractError::PriceMathOverflow)?;
-        Ok(index_price)
+        validation::calculate_index_price(&env, &components)
     }
 
     pub fn init_admin(env: Env, admin: Address) {
@@ -1331,27 +1280,7 @@ impl PriceOracle {
         admin.require_auth();
         crate::auth::_require_authorized(&env, &admin);
 
-        if configs.len() == 0 {
-            return Err(ContractError::InvalidAssetConfig);
-        }
-
-        if max_deviation_bps <= 0 || max_deviation_bps > 10_000 {
-            return Err(ContractError::InvalidMaxDeviation);
-        }
-
-        for config in configs.iter() {
-            if config.min_price <= 0
-                || config.max_price <= 0
-                || config.min_price > config.max_price
-            {
-                return Err(ContractError::InvalidPriceBounds);
-            }
-            if let Some(price_floor) = config.price_floor {
-                if price_floor <= 0 || price_floor > config.max_price {
-                    return Err(ContractError::InvalidPriceBounds);
-                }
-            }
-        }
+        validation::validate_asset_registration_configs(&configs, max_deviation_bps)?;
 
         if let Some(existing) = env
             .storage()
@@ -2160,21 +2089,18 @@ impl PriceOracle {
     /// by snapshot tests and migration tooling. It does **not** touch
     /// `VerifiedPrice` or `CommunityPrice` buckets; use `remove_asset` for that.
     pub fn clear_assets(env: Env, assets: soroban_sdk::Vec<Symbol>) -> Result<(), ContractError> {
-        if assets.len() > MAX_CLEAR_ASSETS {
-            return Err(ContractError::TooManyAssets);
-        }
-
-        let storage = env.storage().persistent();
-        for asset in assets.iter() {
-            storage.remove(&DataKey::Price(asset));
-        }
-
-        Ok(())
+        validation::clear_assets(&env, &assets)
     }
 
     /// Update the price for a specific asset (authorized backend relayer function).
     ///
     /// Writes to the `VerifiedPrice` bucket. Only whitelisted providers may call this.
+    ///
+    /// # Liquidity Validation
+    /// As of the flash loan protection update, providers must submit pool liquidity
+    /// data alongside price updates. Submissions from markets with insufficient
+    /// liquidity (below the configured threshold) are rejected early to prevent
+    /// price manipulation via flash loans or other temporary capital injections.
     pub fn update_price(
         env: Env,
         source: Address,
@@ -2183,6 +2109,7 @@ impl PriceOracle {
         decimals: u32,
         confidence_score: u32,
         ttl: u64,
+        liquidity: i128,
     ) -> Result<(), ContractError> {
         _require_not_destroyed(&env);
         _require_initialized(&env);
@@ -2269,6 +2196,18 @@ impl PriceOracle {
                     return Err(ContractError::PriceOutOfBounds);
                 }
             }
+        }
+
+        // ── Liquidity validation: flash loan manipulation prevention ────────────
+        // Validate that the reported pool liquidity meets the configured minimum
+        // threshold. This check prevents price manipulation via flash loans or
+        // other temporary capital injections into thin markets.
+        //
+        // The validation is performed AFTER all other safety checks but BEFORE
+        // the price is added to the buffer, ensuring early termination of
+        // transactions from insufficient-liquidity sources.
+        if !bypass_active {
+            validation::validate_liquidity(&env, &asset, &source, liquidity)?;
         }
 
         // Add the normalized price entry to the buffer
@@ -2585,6 +2524,161 @@ impl PriceOracle {
             .unwrap_or(MAX_PERCENT_CHANGE_BPS)
             .max(MIN_SAFE_MAX_DEVIATION_BPS)
     }
+
+    // ── Liquidity threshold configuration (flash loan protection) ───────────
+
+    /// Set the minimum liquidity threshold for an asset.
+    ///
+    /// Price submissions from pools with liquidity below this threshold will be
+    /// rejected to prevent flash loan manipulation. The threshold must be within
+    /// the range defined by MIN_LIQUIDITY_THRESHOLD..MAX_LIQUIDITY_THRESHOLD.
+    ///
+    /// # Parameters
+    /// - `admin`: Authorized admin address (requires auth)
+    /// - `asset`: Asset symbol to configure (e.g. "XLM_USD")
+    /// - `threshold`: Minimum liquidity in stroops (1 XLM = 10_000_000 stroops)
+    ///
+    /// # Errors
+    /// - `ContractError::InvalidLiquidityThreshold`: threshold out of valid range
+    /// - `ContractError::NotAuthorized`: caller is not an authorized admin
+    ///
+    /// # Example
+    /// ```rust
+    /// // Set 100M stroops (10 XLM) minimum liquidity for XLM/USD
+    /// oracle.set_liquidity_threshold(&admin, &symbol!("XLM_USD"), &100_000_000);
+    /// ```
+    pub fn set_liquidity_threshold(
+        env: Env,
+        admin: Address,
+        asset: Symbol,
+        threshold: i128,
+    ) -> Result<(), ContractError> {
+        _require_not_destroyed(&env);
+        _require_initialized(&env);
+        crate::auth::_require_not_frozen(&env);
+        admin.require_auth();
+        crate::auth::_require_authorized(&env, &admin);
+
+        // Validate and set the threshold using the validation module
+        validation::set_liquidity_threshold_internal(&env, &asset, threshold)?;
+
+        Ok(())
+    }
+
+    /// Get the configured liquidity threshold for an asset.
+    ///
+    /// Returns the minimum pool liquidity required for price submissions to be
+    /// accepted. Returns None if no threshold has been configured for this asset.
+    ///
+    /// # Parameters
+    /// - `asset`: Asset symbol to query
+    ///
+    /// # Returns
+    /// - `Some(threshold)`: The configured minimum liquidity in stroops
+    /// - `None`: No threshold configured (validation disabled for this asset)
+    pub fn get_liquidity_threshold(env: Env, asset: Symbol) -> Option<i128> {
+        validation::get_liquidity_threshold(&env, &asset)
+    }
+
+    /// Remove the liquidity threshold for an asset.
+    ///
+    /// After removal, price submissions for this asset will no longer undergo
+    /// liquidity validation. Use with caution as this re-exposes the contract
+    /// to flash loan manipulation risks.
+    ///
+    /// # Parameters
+    /// - `admin`: Authorized admin address (requires auth)
+    /// - `asset`: Asset symbol to remove threshold from
+    ///
+    /// # Errors
+    /// - `ContractError::NotAuthorized`: caller is not an authorized admin
+    pub fn remove_liquidity_threshold(env: Env, admin: Address, asset: Symbol) {
+        _require_not_destroyed(&env);
+        _require_initialized(&env);
+        crate::auth::_require_not_frozen(&env);
+        admin.require_auth();
+        crate::auth::_require_authorized(&env, &admin);
+
+        validation::remove_liquidity_threshold_internal(&env, &asset);
+    }
+
+    /// Get the last reported liquidity from a provider for a specific asset.
+    ///
+    /// Useful for monitoring provider behavior and reputation scoring.
+    ///
+    /// # Parameters
+    /// - `provider`: The relayer address to query
+    /// - `asset`: The asset symbol to query
+    ///
+    /// # Returns
+    /// - `Some(liquidity)`: The last liquidity value reported by this provider
+    /// - `None`: Provider has never submitted liquidity for this asset
+    pub fn get_provider_liquidity(env: Env, provider: Address, asset: Symbol) -> Option<i128> {
+        validation::get_provider_liquidity(&env, &provider, &asset)
+    }
+
+    /// Get the timestamp of the last successful liquidity validation for an asset.
+    ///
+    /// Useful for monitoring and auditing the frequency of liquidity validations.
+    ///
+    /// # Parameters
+    /// - `asset`: The asset symbol to query
+    ///
+    /// # Returns
+    /// - `Some(timestamp)`: Unix timestamp of last validation
+    /// - `None`: No validations have been performed for this asset
+    pub fn get_last_liquidity_validation(env: Env, asset: Symbol) -> Option<u64> {
+        validation::get_last_validation_timestamp(&env, &asset)
+    }
+
+    /// Execute a liquidity-based slash against a provider.
+    ///
+    /// Called by governance when a provider is detected submitting prices from
+    /// pools below the configured liquidity threshold. Applies a graduated penalty
+    /// based on how far below the threshold the reported liquidity fell.
+    ///
+    /// # Parameters
+    /// - `executor`: Admin executing the slash (requires auth)
+    /// - `provider`: The relayer being penalized
+    /// - `asset`: Asset pair the violation occurred on
+    /// - `reported_liquidity`: The insufficient liquidity value submitted
+    /// - `base_slash_amount`: Base penalty before liquidity multiplier
+    ///
+    /// # Errors
+    /// - `Err(Error::InvalidLiquidityThreshold)`: No threshold configured for asset
+    /// - `Err(Error::InsufficientStake)`: Provider doesn't have enough stake
+    ///
+    /// # Penalty Tiers
+    /// - **≥ 100% of threshold**: No penalty (1× multiplier)
+    /// - **75-99%**: Minor penalty (2× multiplier)
+    /// - **50-74%**: Moderate penalty (4× multiplier)
+    /// - **25-49%**: Significant penalty (8× multiplier)
+    /// - **< 25%**: Severe penalty (16× multiplier)
+    pub fn slash_for_low_liquidity(
+        env: Env,
+        executor: Address,
+        provider: Address,
+        asset: Symbol,
+        reported_liquidity: i128,
+        base_slash_amount: i128,
+    ) -> Result<(), ContractError> {
+        _require_not_destroyed(&env);
+        _require_initialized(&env);
+        crate::auth::_require_not_frozen(&env);
+        executor.require_auth();
+        crate::auth::_require_authorized(&env, &executor);
+
+        validation::slash_for_low_liquidity(
+            &env,
+            &executor,
+            &provider,
+            &asset,
+            reported_liquidity,
+            base_slash_amount,
+        )
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     /// Get the current ledger sequence number.
     ///
@@ -2996,16 +3090,17 @@ impl PriceOracle {
     ///
     /// # Returns
     /// The action ID that can be used to vote on this proposal
-    /// Set the minimum number of votes required for a governance proposal to reach quorum (issue #292).
-    /// Admin-only. Default is 1 (no floor) when unset.
+    /// Set the minimum number of votes required for a governance proposal to
+    /// reach quorum (issue #292).
+    ///
+    /// Admin-only. Default is 1 (no floor) when unset. Values below the hard
+    /// floor are rejected, and the getter clamps legacy low storage to the
+    /// same minimum.
     pub fn set_min_quorum_threshold(
         env: Env,
         admin: Address,
         threshold: u32,
     ) -> Result<(), ContractError> {
-    /// Admin-only. Values below the hard floor are rejected, and the getter
-    /// clamps legacy low storage to the same minimum.
-    pub fn set_min_quorum_threshold(env: Env, admin: Address, threshold: u32) -> Result<(), ContractError> {
         _require_not_destroyed(&env);
         _require_initialized(&env);
         crate::auth::_require_not_frozen(&env);
@@ -4124,3 +4219,4 @@ mod role_registry;
 mod slashing;
 mod test;
 mod types;
+mod validation;
