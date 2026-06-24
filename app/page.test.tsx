@@ -1,77 +1,187 @@
-import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import Home from './page';
+import "@testing-library/jest-dom";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 
-// These tests mock `global.fetch` to simulate the backend health endpoint.
-// They assert the loading disabled state, button label transitions, and
-// JSON rendering for success and network failure outcomes.
+import Home from "./page";
+import { getHealth } from "../lib/api/health";
 
-describe('Home page API health check', () => {
-  afterEach(() => {
-    jest.restoreAllMocks();
+// IMPORTANT: mock before tests
+jest.mock("../lib/api/health", () => ({
+  __esModule: true,
+  getHealth: jest.fn(),
+}));
+
+const mockGetHealth = getHealth as jest.Mock;
+
+describe("Home Page Health Check", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  function createDeferred() {
-    let resolve;
-    let reject;
-    const promise = new Promise((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    return { promise, resolve, reject };
-  }
+  it("verifies mock", () => {
+    expect(jest.isMockFunction(getHealth)).toBe(true);
+  });
 
-  it('renders health JSON on successful fetch and toggles button label', async () => {
-    const mockResponse = { status: 'ok', uptime: 12345 };
-    const deferred = createDeferred();
+  it("renders the health check button", () => {
+    render(<Home />);
 
-    // Mock fetch to stay pending until the test resolves it.
-    global.fetch = jest.fn(() =>
-      deferred.promise.then(() => ({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      })),
+    expect(
+      screen.getByRole("button", {
+        name: /check backend health/i,
+      })
+    ).toBeTruthy();
+  });
+
+  it("disables button while loading", async () => {
+    mockGetHealth.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                status: "connected",
+                message: "Backend is healthy",
+              }),
+            100
+          )
+        )
     );
 
     render(<Home />);
 
-    const user = userEvent.setup();
-    const checkButton = screen.getByRole('button', { name: /check backend health/i });
+    const button = screen.getByRole("button", {
+      name: /check backend health/i,
+    });
 
-    await user.click(checkButton);
+    fireEvent.click(button);
 
-    // The button should become disabled while the fetch is pending.
-    await waitFor(() => expect(checkButton).toBeDisabled());
-    expect(screen.getByRole('button', { name: /checking…/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(button).toBeDisabled();
+    });
 
-    deferred.resolve();
-
-    const jsonNode = await screen.findByText(/"status": "ok"/i);
-    expect(jsonNode).toBeInTheDocument();
-
-    await waitFor(() => expect(screen.getByRole('button', { name: /check backend health/i })).toBeEnabled());
+    expect(
+      screen.getByText(/checking/i)
+    ).toBeTruthy();
   });
 
-  it('renders error object when fetch rejects', async () => {
-    const deferred = createDeferred();
-
-    global.fetch = jest.fn(() => deferred.promise);
+  it("renders connected state", async () => {
+    mockGetHealth.mockResolvedValue({
+      status: "connected",
+      message: "Backend is healthy",
+      details: {
+        status: "ok",
+      },
+    });
 
     render(<Home />);
 
-    const user = userEvent.setup();
-    const checkButton = screen.getByRole('button', { name: /check backend health/i });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /check backend health/i,
+      })
+    );
 
-    await user.click(checkButton);
+    await waitFor(() => {
+      expect(
+        screen.getByText(/backend is healthy/i)
+      ).toBeTruthy();
+    });
+  });
 
-    await waitFor(() => expect(checkButton).toBeDisabled());
-    expect(screen.getByRole('button', { name: /checking…/i })).toBeInTheDocument();
+  it("renders degraded state", async () => {
+    mockGetHealth.mockResolvedValue({
+      status: "degraded",
+      message: "Backend responded with 500",
+      details: {
+        error: "Internal Server Error",
+      },
+    });
 
-    deferred.reject(new Error('network failure'));
+    render(<Home />);
 
-    const errorNode = await screen.findByText(/"status": "error"/i);
-    expect(errorNode).toBeInTheDocument();
-    expect(errorNode).toHaveTextContent(/network failure/i);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /check backend health/i,
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/backend responded with 500/i)
+      ).toBeTruthy();
+    });
+  });
+
+  it("renders unreachable state", async () => {
+    mockGetHealth.mockResolvedValue({
+      status: "unreachable",
+      message: "Health check timed out",
+    });
+
+    render(<Home />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /check backend health/i,
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/health check timed out/i)
+      ).toBeTruthy();
+    });
+  });
+
+  it("renders raw response details", async () => {
+    mockGetHealth.mockResolvedValue({
+      status: "degraded",
+      message: "Backend responded with 500",
+      details: {
+        error: "Internal Server Error",
+      },
+    });
+
+    render(<Home />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /check backend health/i,
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/view details/i)
+      ).toBeTruthy();
+    });
+  });
+
+  it("announces status updates politely", async () => {
+    mockGetHealth.mockResolvedValue({
+      status: "connected",
+      message: "Backend is healthy",
+      details: {
+        status: "ok",
+      },
+    });
+
+    render(<Home />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /check backend health/i,
+      })
+    );
+
+    const statusRegion = await screen.findByRole("status");
+
+    expect(
+      statusRegion.getAttribute("aria-live")
+    ).toBe("polite");
   });
 });

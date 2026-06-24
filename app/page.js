@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { copy } from './copy/en';
 import NavMenu from '../components/NavMenu';
+import { getHealth } from '../lib/api/health';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -13,12 +14,10 @@ export default function Home() {
 
   const checkApi = async () => {
     setLoading(true);
+
     try {
-      const res = await fetch(`${API_URL}/health`);
-      const data = await res.json();
-      setHealth(data);
-    } catch (e) {
-      setHealth({ status: "error", message: e.message });
+      const result = await getHealth(API_URL);
+      setHealth(result);
     } finally {
       setLoading(false);
     }
@@ -50,16 +49,34 @@ export default function Home() {
         </div>
 
         <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-6">
-          <h2 className="text-sm font-medium text-slate-400 mb-2">API status</h2>
+          <h2 className="text-sm font-medium text-slate-400 mb-2">{copy.home.apiStatus}</h2>
           <button
             type="button"
             onClick={checkApi}
             disabled={loading}
-            className="rounded-lg bg-slate-800 px-4 py-3 text-sm font-medium hover:bg-slate-700 disabled:opacity-50"
+            className="rounded-lg cursor-pointer bg-slate-800 px-4 py-3 text-sm font-medium hover:bg-slate-700 disabled:opacity-50"
           >
-            {loading ? "Checking…" : "Check backend health"}
+            {loading ? copy.home.checking : copy.home.checkApiHealth}
           </button>
-          {health && <pre className="mt-4 p-4 rounded-lg bg-slate-950 text-xs text-slate-300 overflow-auto">{JSON.stringify(health, null, 2)}</pre>}
+          {!loading && health && (
+            <>
+              <p role="status" aria-live="polite">
+                Status: {health?.status ?? "Not checked"}
+              </p>
+
+              <p>{health.message}</p>
+
+              {health.details && (
+                <details>
+                  <summary>View details</summary>
+
+                  <pre>
+                    {JSON.stringify(health.details, null, 2)}
+                  </pre>
+                </details>
+              )}
+            </>
+          )}
         </div>
       </main>
     </div>

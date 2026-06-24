@@ -206,7 +206,7 @@ For frontend/backend contract details see:
 | `npm run build`    | Production build             |
 | `npm run start`    | Start production server      |
 | `npm run lint`     | Run ESLint                   |
-| `npm run test:e2e` | Run Playwright smoke tests   |
+| `npm run test:e2e` | Run Playwright smoke tests (toast & invest marketplace) |
 
 Default: [http://localhost:3000](http://localhost:3000). The home page can check API health at `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`).
 
@@ -360,6 +360,21 @@ export default function MyPage() {
 
 See [TESTING.md](TESTING.md) for the full guide covering Jest unit/accessibility tests and Playwright end-to-end setup.
 
+## Backend Health Check
+
+The home page health check now:
+
+- Uses an 8 second timeout.
+- Aborts hung requests.
+- Safely handles HTML and malformed JSON responses.
+- Reports one of the following:
+
+  - Connected
+  - Degraded
+  - Unreachable
+
+- Provides a detailed disclosure for raw responses.
+
 ## Contracts
 
 - [WALLET_INTEGRATION_CONTRACT.md](WALLET_INTEGRATION_CONTRACT.md)
@@ -379,3 +394,30 @@ See [TESTING.md](TESTING.md) for the full guide covering Jest unit/accessibility
 ## License
 
 MIT (see root LiquiFact project for full license).
+
+
+### Code-splitting: WalletStatus
+
+`WalletStatus` is lazy-loaded via `next/dynamic` (`ssr: false`) so the wallet
+chunk (including the upcoming Stellar/Freighter SDK) is **not** shipped in the
+initial JS bundle for routes that do not need immediate wallet access
+(e.g. the static home page).
+
+| Route | Before (kB) | After (kB) | Δ |
+|---|---|---|---|
+| `/` (home) | ~X kb | ~X kb | –Y kb |
+| `/invoices` | ~X kb | ~X kb | –Y kb |
+| `/invest` | ~X kb | ~X kb | –Y kb |
+
+*Run `npm run build` and inspect `.next/static/chunks` to verify. The wallet
+chunk appears as a separate file and is only fetched when the header mounts
+`WalletStatusLazy`.*
+
+**Why `ssr: false`?** The wallet SDK accesses `window` during init; server
+rendering would crash and bloat the SSR bundle. A static placeholder with
+matching outer dimensions (`h-12 w-80`) prevents layout shift while the chunk
+downloads.
+
+**Placeholder → component swap** is handled by `next/dynamic` automatically.
+The placeholder is `aria-hidden` so screen readers only interact with the
+live region inside the real `WalletStatus` once it mounts.
