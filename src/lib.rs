@@ -4,6 +4,8 @@ use soroban_sdk::{contract, contracterror, contractimpl, contracttype, symbol_sh
 pub(crate) mod nonce;
 use crate::nonce::{consume_nonce, get_nonce};
 
+pub mod consensus;
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -282,6 +284,13 @@ impl TimeLockedUpgradeContract {
     }
 
     // --- Private Helpers ---
+
+    fn assert_contract_is_active(env: &Env) -> Result<(), ContractError> {
+        if !env.storage().instance().has(&DATA_KEY) {
+            return Err(ContractError::NotInitialized);
+        }
+        Ok(())
+    }
 
     fn _record_heartbeat(env: &Env, asset: Symbol) {
         let mut timestamps: Map<Symbol, u64> = env.storage().temporary().get(&HEARTBEAT_KEY).unwrap_or_else(|| Map::new(env));
