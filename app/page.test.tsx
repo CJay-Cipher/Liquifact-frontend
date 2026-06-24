@@ -1,25 +1,37 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from './page';
 
 // These tests mock `global.fetch` to simulate the backend health endpoint.
-// We assert the loading label, disabled button state, and rendered JSON output.
+// They assert the loading disabled state, button label transitions, and
+// JSON rendering for success and network failure outcomes.
 
 describe('Home page API health check', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
+  function createDeferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
   it('renders health JSON on successful fetch and toggles button label', async () => {
     const mockResponse = { status: 'ok', uptime: 12345 };
+    const deferred = createDeferred();
 
-    // Mock fetch to resolve with a JSON payload
+    // Mock fetch to stay pending until the test resolves it.
     global.fetch = jest.fn(() =>
-      Promise.resolve({
+      deferred.promise.then(() => ({
         ok: true,
         json: () => Promise.resolve(mockResponse),
-      }),
+      })),
     );
 
     render(<Home />);
@@ -27,25 +39,24 @@ describe('Home page API health check', () => {
     const user = userEvent.setup();
     const checkButton = screen.getByRole('button', { name: /check backend health/i });
 
-    // Click triggers loading state
     await user.click(checkButton);
 
-    // Button should show checking label and be disabled while loading
-    const loadingButton = screen.getByRole('button', { name: /checking…/i });
-    expect(loadingButton).toBeDisabled();
+    // The button should become disabled while the fetch is pending.
+    await waitFor(() => expect(checkButton).toBeDisabled());
+    expect(screen.getByRole('button', { name: /checking…/i })).toBeInTheDocument();
 
-    // Wait for the JSON blob to render inside the <pre>
+    deferred.resolve();
+
     const jsonNode = await screen.findByText(/"status": "ok"/i);
     expect(jsonNode).toBeInTheDocument();
 
-    // After resolution the button returns to its idle state and is enabled
-    const idleButton = await screen.findByRole('button', { name: /check backend health/i });
-    expect(idleButton).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /check backend health/i })).toBeEnabled());
   });
 
   it('renders error object when fetch rejects', async () => {
-    // Mock fetch to reject (network error)
-    global.fetch = jest.fn(() => Promise.reject(new Error('network failure')));
+    const deferred = createDeferred();
+
+    global.fetch = jest.fn(() => deferred.promise);
 
     render(<Home />);
 
@@ -54,10 +65,11 @@ describe('Home page API health check', () => {
 
     await user.click(checkButton);
 
-    // While loading the button should show the checking label and be disabled
-    expect(screen.getByRole('button', { name: /checking…/i })).toBeDisabled();
+    await waitFor(() => expect(checkButton).toBeDisabled());
+    expect(screen.getByRole('button', { name: /checking…/i })).toBeInTheDocument();
 
-    // The component sets health to { status: 'error', message }
+    deferred.reject(new Error('network failure'));
+
     const errorNode = await screen.findByText(/"status": "error"/i);
     expect(errorNode).toBeInTheDocument();
     expect(errorNode).toHaveTextContent(/network failure/i);
