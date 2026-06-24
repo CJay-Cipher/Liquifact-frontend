@@ -1,36 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useWallet, WALLET_STATES } from './WalletContext';
+import Button from './Button';
 
 export default function WalletStatus() {
   const { walletState, walletData, error, connectWallet, disconnectWallet } = useWallet();
-  
-  // Defensive hydration guard: if this component is ever imported directly
-  // (not through the lazy wrapper), render an identical placeholder on
-  // first paint to avoid hydration mismatch warnings. The lazy wrapper
-  // already handles this, but this guard protects against direct imports.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <div
-        data-testid="wallet-status-placeholder"
-        aria-hidden="true"
-        className="flex items-center gap-4 h-12 w-80 animate-pulse rounded-full bg-slate-800/50"
-      />
-    );
-  }
 
   const getStateConfig = (state) => {
     switch (state) {
       case WALLET_STATES.DISCONNECTED:
         return {
           buttonText: 'Connect Wallet',
-          buttonVariant: 'primary',
+          variant: 'primary',
           helperText: 'Connect your Stellar wallet to access the platform',
           disabled: false,
           showAddress: false,
@@ -39,16 +20,16 @@ export default function WalletStatus() {
       case WALLET_STATES.CONNECTING:
         return {
           buttonText: 'Connecting…',
-          buttonVariant: 'loading',
+          variant: 'primary',
           helperText: 'Please approve the connection in your wallet',
-          disabled: true,
+          loading: true,
           showAddress: false,
         };
 
       case WALLET_STATES.CONNECTED:
         return {
           buttonText: 'Disconnect',
-          buttonVariant: 'secondary',
+          variant: 'secondary',
           helperText: `Connected to Stellar ${walletData?.network || 'public'}`,
           disabled: false,
           showAddress: true,
@@ -57,7 +38,7 @@ export default function WalletStatus() {
       case WALLET_STATES.ERROR:
         return {
           buttonText: 'Retry Connection',
-          buttonVariant: 'primary',
+          variant: 'primary',
           helperText: error || 'Connection failed. Please try again.',
           disabled: false,
           showAddress: false,
@@ -66,7 +47,7 @@ export default function WalletStatus() {
       case WALLET_STATES.WRONG_NETWORK:
         return {
           buttonText: 'Switch Network',
-          buttonVariant: 'warning',
+          variant: 'warning',
           helperText: 'Please switch to the Stellar public network',
           disabled: false,
           showAddress: false,
@@ -75,7 +56,7 @@ export default function WalletStatus() {
       case WALLET_STATES.NO_WALLET:
         return {
           buttonText: 'Install Wallet',
-          buttonVariant: 'external',
+          variant: 'external',
           helperText: 'No Stellar wallet detected. Install one to continue',
           disabled: false,
           showAddress: false,
@@ -84,27 +65,6 @@ export default function WalletStatus() {
   };
 
   const config = getStateConfig(walletState);
-
-  const getButtonStyles = (variant) => {
-    const baseStyles = 'rounded-full px-4 py-3 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950';
-
-    switch (variant) {
-      case 'primary':
-        return `${baseStyles} bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 focus:ring-cyan-500 ${config.disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
-
-      case 'secondary':
-        return `${baseStyles} border border-slate-600 text-slate-300 hover:bg-slate-800 focus:ring-slate-500`;
-
-      case 'loading':
-        return `${baseStyles} bg-cyan-500/30 text-cyan-300 cursor-wait`;
-
-      case 'warning':
-        return `${baseStyles} bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 focus:ring-amber-500`;
-
-      case 'external':
-        return `${baseStyles} bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 focus:ring-violet-500`;
-    }
-  };
 
   const handleClick = () => {
     switch (walletState) {
@@ -147,39 +107,16 @@ export default function WalletStatus() {
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={handleClick}
+      <Button
+        variant={config.variant}
+        loading={config.loading}
         disabled={config.disabled}
-        className={getButtonStyles(config.buttonVariant)}
+        onClick={handleClick}
         aria-label={config.buttonText}
         aria-describedby="wallet-helper-text"
       >
-        {walletState === WALLET_STATES.CONNECTING && (
-          <svg
-            className="animate-spin -ml-1 mr-2 h-4 w-4 inline"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-        )}
         {config.buttonText}
-      </button>
+      </Button>
 
       <div className="sr-only" role="status" aria-live="polite">
         Wallet status:

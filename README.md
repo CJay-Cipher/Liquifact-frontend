@@ -397,3 +397,30 @@ The **Invest** marketplace (`app/invest/page.js`) renders invoices PAGE_SIZE at 
 ## License
 
 MIT (see root LiquiFact project for full license).
+
+
+### Code-splitting: WalletStatus
+
+`WalletStatus` is lazy-loaded via `next/dynamic` (`ssr: false`) so the wallet
+chunk (including the upcoming Stellar/Freighter SDK) is **not** shipped in the
+initial JS bundle for routes that do not need immediate wallet access
+(e.g. the static home page).
+
+| Route | Before (kB) | After (kB) | Δ |
+|---|---|---|---|
+| `/` (home) | ~X kb | ~X kb | –Y kb |
+| `/invoices` | ~X kb | ~X kb | –Y kb |
+| `/invest` | ~X kb | ~X kb | –Y kb |
+
+*Run `npm run build` and inspect `.next/static/chunks` to verify. The wallet
+chunk appears as a separate file and is only fetched when the header mounts
+`WalletStatusLazy`.*
+
+**Why `ssr: false`?** The wallet SDK accesses `window` during init; server
+rendering would crash and bloat the SSR bundle. A static placeholder with
+matching outer dimensions (`h-12 w-80`) prevents layout shift while the chunk
+downloads.
+
+**Placeholder → component swap** is handled by `next/dynamic` automatically.
+The placeholder is `aria-hidden` so screen readers only interact with the
+live region inside the real `WalletStatus` once it mounts.

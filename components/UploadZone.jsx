@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import Button from './Button';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -249,29 +250,14 @@ function UploadZone() {
         </p>
       )}
 
-      <button
-        id="invoice-upload-btn"
-        type="submit"
-        disabled={!file || isProcessing}
-        aria-disabled={!file || isProcessing}
-        className="mt-4 w-full rounded-xl bg-cyan-500 py-3 text-sm font-semibold text-slate-950 transition-all duration-200
-          hover:bg-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400
-          disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {status === 'uploading' && (
-          <>
-            <Spinner />
-            Uploading invoice...
-          </>
-        )}
-        {status === 'tokenizing' && (
-          <>
-            <Spinner />
-            Tokenizing invoice...
-          </>
-        )}
-        {(status === 'idle' || status === 'success') && 'Upload & Tokenize Invoice'}
-      </button>
+      <Button
+  variant="primary"
+  loading={isUploading}
+  disabled={!file || isUploading}
+  onClick={handleUpload}
+>
+  {isUploading ? 'Uploading…' : 'Upload Invoice'}
+</Button>
     </form>
   );
 }

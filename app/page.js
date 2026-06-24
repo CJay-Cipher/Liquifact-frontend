@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { copy } from './copy/en';
+import Button from '@/components/Button';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -50,14 +51,9 @@ export default function Home() {
 
         <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-6">
           <h2 className="text-sm font-medium text-slate-400 mb-2">API status</h2>
-          <button
-            type="button"
-            onClick={checkApi}
-            disabled={loading}
-            className="rounded-lg bg-slate-800 px-4 py-3 text-sm font-medium hover:bg-slate-700 disabled:opacity-50"
-          >
-            {loading ? "Checking…" : "Check backend health"}
-          </button>
+          <Button variant="primary" onClick={handleCtaClick}>
+  Get Started
+</Button>
           {health && <pre className="mt-4 p-4 rounded-lg bg-slate-950 text-xs text-slate-300 overflow-auto">{JSON.stringify(health, null, 2)}</pre>}
         </div>
       </main>

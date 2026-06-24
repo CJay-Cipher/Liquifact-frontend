@@ -1,4 +1,5 @@
 "use client";
+import Button from '@/components/Button';
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -202,17 +203,9 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
 
             {/* Yield Range Filter */}
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled
-                className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm text-slate-500 cursor-not-allowed opacity-60 transition-colors"
-                aria-label="Yield range filter (coming soon)"
-              >
-                Yield Range
-                <svg className="inline-block ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+              <Button variant="secondary" disabled>
+  Coming Soon
+</Button>
               <span className="inline-flex items-center rounded-full bg-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-300">Soon</span>
             </div>
 
