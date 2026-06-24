@@ -1,49 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { useToast } from './ToastProvider';
-import { useWallet, WALLET_STATES } from './WalletProvider';
-
-export { WALLET_STATES };
+import { useWallet, WALLET_STATES } from './WalletContext';
 
 export default function WalletStatus() {
-  const { state: walletState, walletData, connect, disconnect } = useWallet();
-  const [error, setError] = useState(null);
-  const toast = useToast();
-
-  const connectWallet = async () => {
-    setError(null);
-    const result = await connect();
-
-    switch (result.outcome) {
-      case 'success':
-        toast.success('Wallet connected successfully.', 'Wallet connected');
-        break;
-      case 'error':
-        setError(result.message || 'Failed to connect to wallet. Please try again.');
-        toast.error(
-          result.message || 'Failed to connect to wallet. Please try again.',
-          'Connection failed',
-        );
-        break;
-      case 'wrong_network':
-        setError(
-          result.message || 'Wallet is connected to testnet. Please switch to public network.',
-        );
-        toast.error(
-          result.message || 'Wallet is connected to testnet. Please switch to public network.',
-          'Wrong network',
-        );
-        break;
-      default:
-        break;
-    }
-  };
-
-  const disconnectWallet = () => {
-    disconnect();
-    setError(null);
-  };
+  const { walletState, walletData, error, connectWallet, disconnectWallet } = useWallet();
 
   const getStateConfig = (state) => {
     switch (state) {
@@ -58,7 +18,7 @@ export default function WalletStatus() {
 
       case WALLET_STATES.CONNECTING:
         return {
-          buttonText: 'Connecting...',
+          buttonText: 'Connecting…',
           buttonVariant: 'loading',
           helperText: 'Please approve the connection in your wallet',
           disabled: true,
@@ -100,17 +60,13 @@ export default function WalletStatus() {
           disabled: false,
           showAddress: false,
         };
-
-      default:
-        return getStateConfig(WALLET_STATES.DISCONNECTED);
     }
   };
 
   const config = getStateConfig(walletState);
 
   const getButtonStyles = (variant) => {
-    const baseStyles =
-      'rounded-full px-4 py-3 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950';
+    const baseStyles = 'rounded-full px-4 py-3 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950';
 
     switch (variant) {
       case 'primary':
@@ -127,9 +83,6 @@ export default function WalletStatus() {
 
       case 'external':
         return `${baseStyles} bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 focus:ring-violet-500`;
-
-      default:
-        return getButtonStyles('primary');
     }
   };
 
@@ -148,9 +101,6 @@ export default function WalletStatus() {
       case WALLET_STATES.NO_WALLET:
         window.open('https://www.stellar.org/wallets', '_blank');
         break;
-
-      default:
-        break;
     }
   };
 
@@ -159,12 +109,9 @@ export default function WalletStatus() {
       <div className="flex items-center gap-3">
         <div
           className={`w-2 h-2 rounded-full transition-colors duration-200 ${
-            walletState === WALLET_STATES.CONNECTED
-              ? 'bg-green-500'
-              : walletState === WALLET_STATES.CONNECTING
-                ? 'bg-yellow-500 animate-pulse'
-                : walletState === WALLET_STATES.ERROR || walletState === WALLET_STATES.WRONG_NETWORK
-                  ? 'bg-red-500'
+            walletState === WALLET_STATES.CONNECTED ? 'bg-green-500'
+              : walletState === WALLET_STATES.CONNECTING ? 'bg-yellow-500 animate-pulse'
+                : walletState === WALLET_STATES.ERROR || walletState === WALLET_STATES.WRONG_NETWORK ? 'bg-red-500'
                   : 'bg-slate-600'
           }`}
           aria-hidden="true"
@@ -215,7 +162,9 @@ export default function WalletStatus() {
       </button>
 
       <div className="sr-only" role="status" aria-live="polite">
-        Wallet status: {walletState}
+        Wallet status:
+        {' '}
+        {walletState}
         {walletData?.address && `. Connected as ${walletData.address}`}
         {error && `. Error: ${error}`}
       </div>
@@ -226,3 +175,5 @@ export default function WalletStatus() {
     </div>
   );
 }
+
+export { WALLET_STATES };

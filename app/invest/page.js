@@ -5,53 +5,7 @@ import ErrorBanner from "@/components/ErrorBanner";
 import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
 import InvoiceSearch from "@/components/InvoiceSearch";
 import { copy } from "../copy/en";
-import NavMenu from "../../components/NavMenu";
-
-/**
- * Mock invoice data — replace with real API call once the backend endpoint
- * is available (follow-up: link backend issue here).
- *
- * Contract per item: { id, issuer, amount, currency, dueDate, yield, status }
- * NOTE: yield values are illustrative; contracts use on-chain basis points and actual settlement is at maturity.
- */
-const MOCK_INVOICES = [
-  {
-    id: "inv-001",
-    issuer: "Acme Supplies Ltd",
-    amount: "12,500",
-    currency: "USD",
-    dueDate: "2026-06-15",
-    yield: "8.2%",
-    status: "Open",
-  },
-  {
-    id: "inv-002",
-    issuer: "Bright Logistics GmbH",
-    amount: "7,800",
-    currency: "EUR",
-    dueDate: "2026-07-01",
-    yield: "7.5%",
-    status: "Open",
-  },
-  {
-    id: "inv-003",
-    issuer: "Sunrise Exports Pte",
-    amount: "22,000",
-    currency: "USD",
-    dueDate: "2026-05-30",
-    yield: "9.1%",
-    status: "Open",
-  },
-];
-
-// DEV-only delay (ms) to make the skeleton visible during local development.
-const DEV_DELAY = process.env.NODE_ENV === "development" ? 1500 : 0;
-
-function loadMockInvoices() {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(MOCK_INVOICES), DEV_DELAY);
-  });
-}
+import { loadMockInvoices } from "./lib";
 
 export function getInvoiceLoadAnnouncement(invoices, { filterActive, filteredCount } = {}) {
   if (!Array.isArray(invoices) || invoices.length === 0) {
@@ -236,18 +190,28 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
           <>
             <ul className="space-y-4">
               {invoices.map((inv) => (
-                <li key={inv.id} className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="font-medium text-slate-100">{inv.issuer}</span>
-                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">{inv.status}</span>
-                  </div>
-                  <div className="flex gap-6 text-sm text-slate-300">
-                    <span>
-                      {inv.currency}&nbsp;{inv.amount}
-                    </span>
-                    <span>Est. yield&nbsp;{inv.yield}</span>
-                    <span>Maturity&nbsp;{inv.dueDate}</span>
-                  </div>
+                <li key={inv.id}>
+                  <Link
+                    href={`/invest/${inv.id}`}
+                    className="block rounded-xl border border-slate-800 bg-slate-900/50 p-5 hover:border-cyan-500/50 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+                    aria-label={`View details for ${inv.issuer} invoice ${inv.id}`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-medium text-slate-100">
+                        {inv.issuer}
+                      </span>
+                      <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
+                        {inv.status}
+                      </span>
+                    </div>
+                    <div className="flex gap-6 text-sm text-slate-300">
+                      <span>
+                        {inv.currency}&nbsp;{inv.amount}
+                      </span>
+                      <span>Est. yield&nbsp;{inv.yield}</span>
+                      <span>Maturity&nbsp;{inv.dueDate}</span>
+                    </div>
+                  </Link>
                 </li>
               ))}
             </ul>

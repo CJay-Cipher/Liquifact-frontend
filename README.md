@@ -216,13 +216,21 @@ The Invest page (`app/invest/page.js`) includes an issuer search field above the
 ```
 liquifact-frontend/
 ├── app/
-│   ├── layout.js      # Root layout, LiquiFact metadata
-│   ├── page.js        # Home (wallet CTA, API health check)
-│   ├── invoices/      # Invoices placeholder page
-│   └── invest/        # Invest placeholder page
+│   ├── layout.js           # Root layout, LiquiFact metadata
+│   ├── page.js             # Home (wallet CTA, API health check)
+│   ├── copy/en.js          # Centralised UI copy
+│   ├── invoices/           # SME invoice upload page
+│   └── invest/             # Investor marketplace
+│       ├── page.js         # Marketplace list (links to detail)
+│       ├── loading.js      # Marketplace skeleton
+│       ├── lib.js          # Mock invoice data + helpers
+│       └── [id]/           # Invoice detail + funding CTA
+│           ├── page.js     # Full invoice details
+│           ├── loading.js  # Detail skeleton
+│           └── not-found.js # Unknown invoice fallback
 ├── components/
-│   ├── NavMenu.jsx    # Responsive site-wide navigation header
-│   └── ...            # Other shared components
+│   ├── WalletStatus.jsx    # Wallet connection UI
+│   └── WalletContext.jsx   # Shared wallet state provider
 ├── public/
 ├── .env.local.example
 ├── eslint.config.mjs

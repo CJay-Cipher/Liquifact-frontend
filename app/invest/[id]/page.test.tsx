@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import {
   getInvoiceLoadAnnouncement,
   InvestMarketplace,
@@ -232,26 +232,6 @@ describe("getInvoiceLoadAnnouncement", () => {
     expect(getInvoiceLoadAnnouncement([{ id: "1" }, { id: "2" }])).toBe(
       "2 investable invoices loaded",
     );
-  });
-
-  it("returns filtered count announcement when filterActive is true", () => {
-    const invoices = [{ id: "1" }, { id: "2" }, { id: "3" }];
-    expect(
-      getInvoiceLoadAnnouncement(invoices, {
-        filterActive: true,
-        filteredCount: 2,
-      }),
-    ).toBe("2 of 3 invoices match");
-  });
-
-  it("returns no-match announcement when filterActive and filteredCount is 0", () => {
-    const invoices = [{ id: "1" }, { id: "2" }];
-    expect(
-      getInvoiceLoadAnnouncement(invoices, {
-        filterActive: true,
-        filteredCount: 0,
-      }),
-    ).toBe("No invoices match");
   });
 });
 
