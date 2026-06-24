@@ -45,6 +45,7 @@ Part of the LiquiFact stack: **frontend** (this repo) | **backend** (Express API
 | `npm run build` | Production build           |
 | `npm run start` | Start production server   |
 | `npm run lint`  | Run ESLint                 |
+| `npm run test:e2e` | Run Playwright smoke tests |
 
 Default: [http://localhost:3000](http://localhost:3000). The home page can check API health at `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`).
 
@@ -82,6 +83,9 @@ Keep both passing before opening a PR.
 
 ## Contributing
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor workflow, branch naming convention, local checks, and accessibility expectations.
+
+
 1. **Fork** the repo and clone your fork.
 2. **Create a branch** from `main`: `git checkout -b feature/your-feature` or `fix/your-fix`.
 3. **Setup**: `npm ci`, optionally `cp .env.local.example .env.local`.
@@ -93,6 +97,28 @@ Keep both passing before opening a PR.
 7. Wait for CI and address review feedback.
 
 We welcome UI improvements, new pages (e.g. invoice upload, marketplace), and Stellar wallet integration aligned with the LiquiFact product.
+## UI Components
+
+See [COMPONENTS.md](COMPONENTS.md) for the full component library reference — props, accessibility notes, and usage examples for every shared component (`ErrorBanner`, `Footer`, `InvoiceListSkeleton`, `ToastProvider`, `UploadZone`, `WalletStatus`).
+
+## Design Tokens
+
+- **Colors**
+  - `--color-bg`: `#0f0f0f` (slate‑950)
+  - `--color-primary`: `#06b6d4` (cyan‑400)
+
+- **Typography**
+  - Font family: **Geist** – imported via `@fontsource/geist`.
+  - Headings use `font‑bold`, body uses `font‑regular`.
+
+## Testing
+
+See [TESTING.md](TESTING.md) for the full guide covering Jest unit/accessibility tests and Playwright end-to-end setup.
+
+## Contracts
+
+- [WALLET_INTEGRATION_CONTRACT.md](WALLET_INTEGRATION_CONTRACT.md)
+- [FILTER_CONTRACTS.md](FILTER_CONTRACTS.md)
 
 ---
 
