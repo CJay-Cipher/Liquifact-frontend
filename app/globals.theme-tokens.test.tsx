@@ -1,24 +1,24 @@
+import fs from "fs";
+import path from "path";
 import "./globals.css";
 
-describe("globals.css theme tokens", () => {
-  it("exposes expected @theme inline CSS variables", () => {
-    // jsdom doesn't evaluate prefers-color-scheme; we only assert variables exist.
-    const root = document.documentElement;
-    expect(getComputedStyle(root).getPropertyValue("--font-geist-sans")).toBeDefined();
+const cssSource = fs.readFileSync(path.join(__dirname, "globals.css"), "utf8");
+const extractToken = (name: string) => {
+  const match = new RegExp(`${name}:\\s*(#(?:[0-9a-f]{6}))`, "i").exec(cssSource);
+  return match ? match[1].toLowerCase() : null;
+};
 
-    // Brand tokens (declared in globals.css)
-    expect(getComputedStyle(root).getPropertyValue("--color-primary").trim()).toMatch(
-      /^#([0-9a-fA-F]{6})$/,
-    );
-    expect(getComputedStyle(root).getPropertyValue("--color-bg").trim()).toMatch(
-      /^#([0-9a-fA-F]{6})$/,
-    );
+describe("globals.css theme tokens", () => {
+  it("exposes expected @theme inline CSS variable values", () => {
+    expect(cssSource).toContain("@theme inline");
+    expect(extractToken("--color-bg")).toBe("#020617");
+    expect(extractToken("--color-primary")).toBe("#22d3ee");
+    expect(extractToken("--color-foreground")).toBe("#f1f5f9");
+    expect(extractToken("--color-muted")).toBe("#94a3b8");
   });
 
   it("body defaults to slate-950 background and slate-100 foreground", () => {
     const bodyStyle = getComputedStyle(document.body);
-    // jsdom may not have exact computed colors depending on tailwind/runtime,
-    // but variables should resolve.
     expect(bodyStyle.backgroundColor).not.toBe("rgb(255, 255, 255)");
   });
 });

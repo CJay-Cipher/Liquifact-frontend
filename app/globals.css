@@ -5,19 +5,19 @@
   Pages assume a dark base UI: bg-slate-950 / text-slate-100.
 
   Token mapping (per README):
-  - --color-bg: #0f0f0f (slate-950)
-  - --color-primary: #06b6d4 (cyan-400)
+  - --color-bg: #020617 (slate-950)
+  - --color-primary: #22d3ee (cyan-400)
 */
 
 @theme inline {
   /* Base surface */
-  --color-bg: #0f0f0f; /* slate-950 */
+  --color-bg: #020617; /* slate-950 */
 
   /* Primary brand */
-  --color-primary: #06b6d4; /* cyan-400 */
+  --color-primary: #22d3ee; /* cyan-400 */
 
   /* Base text */
-  --color-foreground: #f1f5f9; /* slate-100-ish */
+  --color-foreground: #f1f5f9; /* slate-100 */
   --color-muted: #94a3b8; /* slate-400 */
 
   /* Geist fonts (provided by app/layout.js via next/font) */
@@ -25,9 +25,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: light) {
-  /* Keep the app hard-themed dark to match the UI design across pages. */
-}
+/* App is intentionally hard-themed dark; no light-mode overrides are defined. */
 
 html,
 body {

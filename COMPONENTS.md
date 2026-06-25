@@ -304,7 +304,7 @@ Global tokens defined in `app/globals.css` and used across all components.
 
 | Token             | Value     | Tailwind equivalent |
 | ----------------- | --------- | ------------------- |
-| `--color-bg`      | `#0f0f0f` | `slate-950`         |
-| `--color-primary` | `#06b6d4` | `cyan-400`          |
+| `--color-bg`      | `#020617` | `slate-950`         |
+| `--color-primary` | `#22d3ee` | `cyan-400`          |
 
 Font: **Geist** via `@fontsource/geist`. Headings use `font-bold`; body copy uses the default weight.
