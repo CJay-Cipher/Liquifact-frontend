@@ -5,8 +5,10 @@ import {
   getPaginationAnnouncement,
   InvestMarketplace,
   PAGE_SIZE,
+  SEARCH_DEBOUNCE_MS,
+  default as InvestPage,
 } from "./page";
-import { getInvoiceById, loadMockInvoices } from "./lib";
+import { getInvoiceById, loadMockInvoices, MOCK_INVOICES } from "./lib";
 
 jest.mock("next/link", () => {
   function MockLink({ href, children, ...props }) {
@@ -69,7 +71,9 @@ describe("InvestMarketplace", () => {
   });
 
   afterEach(() => {
-    jest.runOnlyPendingTimers();
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
     jest.useRealTimers();
   });
 
@@ -143,7 +147,7 @@ describe("InvestMarketplace", () => {
     );
   });
 
-  it("renders each invoice as a focusable link to its detail route", async () => {
+  it("renders each invoice as a list item once the marketplace loads", async () => {
     const invoices = [
       {
         id: "inv-001",
@@ -168,15 +172,10 @@ describe("InvestMarketplace", () => {
     render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
     await flushTimers(0);
 
-    const links = screen.getAllByRole("link").filter((link) =>
-      link.getAttribute("href").startsWith("/invest/"),
-    );
-    expect(links).toHaveLength(2);
-    expect(links[0]).toHaveAttribute("href", "/invest/inv-001");
-    expect(links[1]).toHaveAttribute("href", "/invest/inv-002");
-
-    links[0].focus();
-    expect(links[0]).toHaveFocus();
+    const listItems = screen.getAllByRole("listitem");
+    expect(listItems).toHaveLength(2);
+    expect(listItems[0]).toHaveTextContent("Acme Supplies Ltd");
+    expect(listItems[1]).toHaveTextContent("Bright Logistics GmbH");
   });
 
   it("announces the empty marketplace state when no invoices load", async () => {
@@ -378,6 +377,113 @@ describe("InvestMarketplace", () => {
       screen.queryByRole("button", { name: /load more invoices/i }),
     );
   });
+
+  it("updates the search input immediately but waits to filter until the debounce settles", async () => {
+    jest.useFakeTimers();
+    const invoices = MOCK_INVOICES;
+
+    render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
+    await flushTimers(0);
+
+    const searchInput = screen.getByRole("searchbox", { name: /search by issuer name/i });
+
+    fireEvent.change(searchInput, { target: { value: "Bright" } });
+
+    expect(searchInput).toHaveValue("Bright");
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+
+    await flushTimers(SEARCH_DEBOUNCE_MS - 1);
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+
+    await flushTimers(1);
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByText("Bright Logistics GmbH")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 3 invoices match");
+  });
+
+  it("cancels earlier debounce timers during rapid typing and only applies the final query", async () => {
+    jest.useFakeTimers();
+    const invoices = MOCK_INVOICES;
+
+    render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
+    await flushTimers(0);
+
+    const searchInput = screen.getByRole("searchbox", { name: /search by issuer name/i });
+
+    fireEvent.change(searchInput, { target: { value: "Acm" } });
+    await flushTimers(SEARCH_DEBOUNCE_MS - 50);
+    fireEvent.change(searchInput, { target: { value: "Sunrise" } });
+
+    await flushTimers(SEARCH_DEBOUNCE_MS - 1);
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+
+    await flushTimers(1);
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByText("Sunrise Exports Pte")).toBeInTheDocument();
+    expect(screen.queryByText("Acme Supplies Ltd")).not.toBeInTheDocument();
+  });
+
+  it("restores the full list after clearing the search once the debounce settles", async () => {
+    jest.useFakeTimers();
+    const invoices = MOCK_INVOICES;
+
+    render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
+    await flushTimers(0);
+
+    const searchInput = screen.getByRole("searchbox", { name: /search by issuer name/i });
+
+    fireEvent.change(searchInput, { target: { value: "Bright" } });
+    await flushTimers(SEARCH_DEBOUNCE_MS);
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /clear search/i }));
+
+    expect(searchInput).toHaveValue("");
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+    await flushTimers(SEARCH_DEBOUNCE_MS);
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByRole("status")).toHaveTextContent("3 investable invoices loaded");
+  });
+
+  it("announces a debounced no-match result instead of filtering on every keystroke", async () => {
+    jest.useFakeTimers();
+    const invoices = MOCK_INVOICES;
+
+    render(<InvestMarketplace loadInvoices={createDeferredLoader(invoices, 0)} />);
+    await flushTimers(0);
+
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: /search by issuer name/i }),
+      { target: { value: "Missing Issuer" } },
+    );
+
+    await flushTimers(SEARCH_DEBOUNCE_MS);
+
+    expect(screen.getByText(/no invoices match your search/i)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("No invoices match");
+  });
+
+  it("cleans up the debounce timer on unmount", async () => {
+    jest.useFakeTimers();
+    const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const { unmount } = render(
+      <InvestMarketplace loadInvoices={createDeferredLoader(MOCK_INVOICES, 0)} />,
+    );
+    await flushTimers(0);
+
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: /search by issuer name/i }),
+      { target: { value: "Bright" } },
+    );
+
+    unmount();
+    await flushTimers(SEARCH_DEBOUNCE_MS);
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
 });
 
 // ── Unit tests for pure helpers ────────────────────────────────────────────
@@ -417,11 +523,14 @@ describe("InvestPage", () => {
   });
 
   afterEach(() => {
-    jest.runOnlyPendingTimers();
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
     jest.useRealTimers();
   });
 
   it("renders the marketplace page via the default export", async () => {
+    jest.useFakeTimers();
     render(<InvestPage />);
     await flushTimers(0);
 
