@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ErrorBanner from "@/components/ErrorBanner";
 import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
+import InvoiceSearch from "@/components/InvoiceSearch";
 import Pagination from "@/components/Pagination";
 import { copy } from "../copy/en";
 import { loadMockInvoices } from "./lib";
@@ -16,58 +17,18 @@ import { loadMockInvoices } from "./lib";
 export const PAGE_SIZE = 10;
 
 /**
- * Mock invoice data — replace with real API call once the backend endpoint
- * is available (follow-up: link backend issue here).
- *
- * Contract per item: { id, issuer, amount, currency, dueDate, yield, status }
- * NOTE: yield values are illustrative; contracts use on-chain basis points and actual settlement is at maturity.
- */
-const MOCK_INVOICES = [
-  {
-    id: "inv-001",
-    issuer: "Acme Supplies Ltd",
-    amount: "12,500",
-    currency: "USD",
-    dueDate: "2026-06-15",
-    yield: "8.2%",
-    status: "Open",
-  },
-  {
-    id: "inv-002",
-    issuer: "Bright Logistics GmbH",
-    amount: "7,800",
-    currency: "EUR",
-    dueDate: "2026-07-01",
-    yield: "7.5%",
-    status: "Open",
-  },
-  {
-    id: "inv-003",
-    issuer: "Sunrise Exports Pte",
-    amount: "22,000",
-    currency: "USD",
-    dueDate: "2026-05-30",
-    yield: "9.1%",
-    status: "Open",
-  },
-];
-
-// DEV-only delay (ms) to make the skeleton visible during local development.
-const DEV_DELAY = process.env.NODE_ENV === "development" ? 1500 : 0;
-
-function loadMockInvoices() {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(MOCK_INVOICES), DEV_DELAY);
-  });
-}
-
-/**
  * Returns the screen-reader announcement text for the initial invoice load.
  *
  * @param {Array} invoices - The resolved invoice array (may be empty).
+ * @param {object} [options]
+ * @param {boolean} [options.filterActive] - Whether an issuer filter is active.
+ * @param {number} [options.filteredCount] - Number of invoices matching the active filter.
  * @returns {string}
  */
-export function getInvoiceLoadAnnouncement(invoices) {
+export function getInvoiceLoadAnnouncement(
+  invoices,
+  { filterActive, filteredCount } = {},
+) {
   if (!Array.isArray(invoices) || invoices.length === 0) {
     return "No invoices available";
   }
@@ -113,6 +74,15 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
+  // Tracks the invoices reference paging was last reset for. Compared during
+  // render (rather than in an effect) per the React-recommended pattern for
+  // resetting state when a prop/value changes: https://react.dev/learn/you-might-not-need-an-effect
+  const [pagingResetFor, setPagingResetFor] = useState(invoices);
+  if (invoices !== pagingResetFor) {
+    setPagingResetFor(invoices);
+    setVisibleCount(PAGE_SIZE);
+  }
+
   /** Ref forwarded to the "Load more" button for focus management. */
   const loadMoreRef = useRef(null);
 
@@ -131,6 +101,7 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
         const normalizedInvoices = Array.isArray(nextInvoices) ? nextInvoices : [];
 
         setInvoices(normalizedInvoices);
+        setStatusMessage(getInvoiceLoadAnnouncement(normalizedInvoices));
       } catch {
         if (!isActive) {
           return;
@@ -148,13 +119,6 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
       isActive = false;
     };
   }, [loadInvoices]);
-
-  // ── Reset paging when a new invoice set arrives ───────────────────────────
-  useEffect(() => {
-    if (invoices !== null) {
-      setVisibleCount(PAGE_SIZE);
-    }
-  }, [invoices]);
 
   // ── Load-more handler ─────────────────────────────────────────────────────
   /**
@@ -300,9 +264,12 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
                   className="rounded-xl border border-slate-800 bg-slate-900/50 p-5"
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <span className="font-medium text-slate-100">
+                    <Link
+                      href={`/invest/${inv.id}`}
+                      className="font-medium text-slate-100 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
+                    >
                       {inv.issuer}
-                    </span>
+                    </Link>
                     <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
                       {inv.status}
                     </span>
