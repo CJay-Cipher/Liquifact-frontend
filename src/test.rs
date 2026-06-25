@@ -1,8 +1,8 @@
-use soroban_sdk::{Env, Symbol, symbol_short, IntoVal};
+use soroban_sdk::{Bytes, Env, symbol_short};
 use soroban_sdk::testutils::{Address as _, Ledger, LedgerInfo};
 use crate::{
-    ContractError, TimeLockedUpgradeContract, TimeLockedUpgradeContractClient,
-    DEFAULT_HEARTBEAT_INTERVAL, UPGRADE_DELAY_SECONDS,
+    ContractError, StakingTier, StakingTierConfig, TimeLockedUpgradeContract,
+    TimeLockedUpgradeContractClient, DEFAULT_HEARTBEAT_INTERVAL, UPGRADE_DELAY_SECONDS,
 };
 
 /// Helper: advance the ledger timestamp by `delta` seconds.
@@ -18,6 +18,12 @@ fn advance_ledger_timestamp(env: &Env, delta: u64) {
         min_persistent_entry_ttl: 0,
         max_entry_ttl: u32::MAX,
     });
+}
+
+fn nonce_proof(env: &Env, nonce: u64, salt_seed: &[u8]) -> (Bytes, soroban_sdk::BytesN<32>) {
+    let salt = Bytes::from_slice(env, salt_seed);
+    let signature = crate::nonce::derive_salt_signature(env, nonce, salt.clone());
+    (salt, signature)
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -39,9 +45,11 @@ fn test_initialize_and_basic_functionality() {
     assert_eq!(data.admin, admin);
     assert_eq!(data.value, 0);
 
-    client.set_value(&42, &admin, &0);
+    let (salt, signature) = nonce_proof(&env, 0, b"set-value-0");
+    client.set_value(&42, &admin, &0, &salt, &signature, &u64::MAX);
     let data = client.get_data();
     assert_eq!(data.value, 42);
+    assert_eq!(client.get_coordinator_nonce(&admin), 1);
 }
 
 #[test]
@@ -55,8 +63,9 @@ fn test_propose_upgrade() {
     client.initialize(&admin);
 
     let new_wasm_hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+    let (salt, signature) = nonce_proof(&env, 0, b"propose-upgrade-0");
 
-    client.propose_upgrade(&new_wasm_hash, &admin, &0);
+    client.propose_upgrade(&new_wasm_hash, &admin, &0, &salt, &signature, &u64::MAX);
 
     let pending = client.get_pending_upgrade();
     assert!(pending.is_some());
@@ -64,10 +73,28 @@ fn test_propose_upgrade() {
     let pending_upgrade = pending.unwrap();
     assert_eq!(pending_upgrade.new_wasm_hash, new_wasm_hash);
     assert_eq!(pending_upgrade.proposer, admin);
+    assert_eq!(client.get_coordinator_nonce(&admin), 1);
 
     let remaining = client.get_upgrade_timelock_remaining();
     assert!(remaining.is_some());
     assert_eq!(remaining.unwrap(), UPGRADE_DELAY_SECONDS);
+}
+
+#[test]
+fn test_set_value_rejects_bad_salt_signature() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    let salt = Bytes::from_slice(&env, b"bad-salt");
+    let bad_signature = soroban_sdk::BytesN::from_array(&env, &[9u8; 32]);
+
+    let result = client.try_set_value(&42, &admin, &0, &salt, &bad_signature, &u64::MAX);
+    assert_eq!(result, Err(Ok(ContractError::InvalidSaltSignature)));
 }
 
 #[test]
@@ -81,8 +108,9 @@ fn test_execute_upgrade_after_timelock() {
     client.initialize(&admin);
 
     let new_wasm_hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+    let (salt, signature) = nonce_proof(&env, 0, b"propose-upgrade-1");
 
-    client.propose_upgrade(&new_wasm_hash, &admin, &0);
+    client.propose_upgrade(&new_wasm_hash, &admin, &0, &salt, &signature, &u64::MAX);
 
     // Fast forward time by 48 hours
     advance_ledger_timestamp(&env, UPGRADE_DELAY_SECONDS);
@@ -104,7 +132,8 @@ fn test_cancel_upgrade() {
 
     let new_wasm_hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
 
-    client.propose_upgrade(&new_wasm_hash, &admin, &0);
+    let (salt, signature) = nonce_proof(&env, 0, b"propose-upgrade-2");
+    client.propose_upgrade(&new_wasm_hash, &admin, &0, &salt, &signature, &u64::MAX);
     assert!(client.get_pending_upgrade().is_some());
 
     client.cancel_upgrade(&admin);
@@ -125,7 +154,8 @@ fn test_timelock_countdown() {
 
     let new_wasm_hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
 
-    client.propose_upgrade(&new_wasm_hash, &admin, &0);
+    let (salt, signature) = nonce_proof(&env, 0, b"propose-upgrade-3");
+    client.propose_upgrade(&new_wasm_hash, &admin, &0, &salt, &signature, &u64::MAX);
 
     let remaining = client.get_upgrade_timelock_remaining().unwrap();
     assert_eq!(remaining, UPGRADE_DELAY_SECONDS);
@@ -340,6 +370,92 @@ fn test_unauthorized_set_value() {
 }
 */
 // ═══════════════════════════════════════════════════════════════════════════
+// Read-Only View Guardrails tests (Issue #449)
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_get_data_is_idempotent() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    let first = client.get_data();
+    let second = client.get_data();
+    assert_eq!(first.admin, second.admin);
+    assert_eq!(first.value, second.value);
+}
+
+#[test]
+fn test_is_data_fresh_does_not_mutate_state() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    let asset = symbol_short!("NGN");
+
+    // Calling is_data_fresh multiple times on the same slot must not alter state
+    assert!(!client.is_data_fresh(&asset));
+    assert!(!client.is_data_fresh(&asset));
+    assert!(!client.is_data_fresh(&asset));
+}
+
+#[test]
+fn test_query_methods_do_not_affect_each_other() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    let asset = symbol_short!("KES");
+
+    // get_data reads contract state; is_data_fresh reads heartbeat storage.
+    // Neither should influence the other's result.
+    let data_before = client.get_data();
+    let _ = client.is_data_fresh(&asset);
+    let data_after = client.get_data();
+
+    assert_eq!(data_before.admin, data_after.admin);
+    assert_eq!(data_before.value, data_after.value);
+}
+
+#[test]
+fn test_get_data_returns_error_before_init() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let result = client.try_get_data();
+    assert_eq!(result, Err(Ok(ContractError::NotInitialized)));
+}
+
+#[test]
+fn test_is_data_fresh_returns_false_for_unknown_asset() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    // Any asset that was never written should return false
+    let asset = symbol_short!("GHS");
+    assert!(!client.is_data_fresh(&asset));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Atomic Staking tests (Issue #289)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -437,6 +553,120 @@ fn test_unstake_removes_node_and_updates_total() {
     assert_eq!(client.get_total_staked(), 0u64);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Dynamic Staking Tier tests (Issue #300)
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_regional_feed_allows_lower_stake_than_premier_feed() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    let node = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    let regional = symbol_short!("KES");
+    let premier = symbol_short!("NGN");
+
+    client.set_asset_feed_metrics(&admin, &regional, &10, &100);
+    client.set_asset_feed_metrics(&admin, &premier, &80, &1_000);
+
+    assert_eq!(client.get_staking_tier(&regional), StakingTier::Regional);
+    assert_eq!(client.get_staking_tier(&premier), StakingTier::Premier);
+    assert!(client.get_required_stake(&regional) < client.get_required_stake(&premier));
+
+    let regional_record = client.stake_and_register_for_feed(&node, &regional, &100u64);
+    assert_eq!(regional_record.tier, StakingTier::Regional);
+    assert_eq!(client.get_feed_stake(&node, &regional), 100u64);
+
+    let premier_result = client.try_stake_and_register_for_feed(&node, &premier, &100u64);
+    assert_eq!(
+        premier_result,
+        Err(Ok(ContractError::InsufficientStakeForTier))
+    );
+
+    let premier_record = client.stake_and_register_for_feed(&node, &premier, &10_000u64);
+    assert_eq!(premier_record.tier, StakingTier::Premier);
+    assert_eq!(client.get_feed_stake(&node, &premier), 10_000u64);
+}
+
+#[test]
+fn test_corridor_volume_bumps_tier_requirements() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    let asset = symbol_short!("GHS");
+    client.set_asset_feed_metrics(&admin, &asset, &10, &200);
+
+    assert_eq!(client.get_staking_tier(&asset), StakingTier::Regional);
+
+    client.add_corridor_fees(&asset, &2_000_000_000u64, &0u64);
+
+    assert_eq!(client.get_staking_tier(&asset), StakingTier::Standard);
+    assert_eq!(client.get_required_stake(&asset), 1_000u64);
+}
+
+#[test]
+fn test_custom_tier_config_is_enforced() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    let node = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    client.set_staking_tier_config(
+        &admin,
+        &StakingTierConfig {
+            regional_min_stake: 250,
+            standard_min_stake: 2_500,
+            premier_min_stake: 25_000,
+        },
+    );
+
+    let asset = symbol_short!("ZAR");
+    client.set_asset_feed_metrics(&admin, &asset, &10, &100);
+
+    assert_eq!(client.get_required_stake(&asset), 250u64);
+
+    let result = client.try_stake_and_register_for_feed(&node, &asset, &200u64);
+    assert_eq!(result, Err(Ok(ContractError::InsufficientStakeForTier)));
+
+    client.stake_and_register_for_feed(&node, &asset, &250u64);
+    assert_eq!(client.get_feed_stake(&node, &asset), 250u64);
+}
+
+#[test]
+fn test_unstake_from_feed_updates_totals() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    let node = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    let asset = symbol_short!("UGX");
+    client.set_asset_feed_metrics(&admin, &asset, &10, &100);
+    client.stake_and_register_for_feed(&node, &asset, &100u64);
+
+    assert_eq!(client.get_total_staked(), 100u64);
+    assert_eq!(client.unstake_from_feed(&node, &asset), 100u64);
+    assert_eq!(client.get_feed_stake(&node, &asset), 0u64);
+    assert_eq!(client.get_total_staked(), 0u64);
+}
+
 #[test]
 fn test_set_value_updates_heartbeat() {
     let env = Env::default();
@@ -453,7 +683,8 @@ fn test_set_value_updates_heartbeat() {
     assert!(!client.is_data_fresh(&value_asset));
 
     // Call set_value — should auto-record heartbeat
-    client.set_value(&42, &admin, &0);
+    let (salt, signature) = nonce_proof(&env, 0, b"set-value-1");
+    client.set_value(&42, &admin, &0, &salt, &signature, &u64::MAX);
 
     // Now the "VALUE" asset should have a fresh heartbeat
     assert!(client.is_data_fresh(&value_asset));
@@ -464,7 +695,8 @@ fn test_set_value_updates_heartbeat() {
     assert!(!client.is_data_fresh(&value_asset));
 
     // Another set_value call refreshes the heartbeat
-    client.set_value(&100, &admin, &1);
+    let (salt, signature) = nonce_proof(&env, 1, b"set-value-2");
+    client.set_value(&100, &admin, &1, &salt, &signature, &u64::MAX);
     assert!(client.is_data_fresh(&value_asset));
 }
 
@@ -493,7 +725,8 @@ fn test_unauthorized_set_value_returns_typed_error() {
     let unauthorized = soroban_sdk::Address::generate(&env);
     client.initialize(&admin);
 
-    let result = client.try_set_value(&42, &unauthorized);
+    let (salt, signature) = nonce_proof(&env, 0, b"set-value-unauth");
+    let result = client.try_set_value(&42, &unauthorized, &0u64, &salt, &signature, &u64::MAX);
     assert_eq!(result, Err(Ok(ContractError::NotAdmin)));
 }
 
@@ -509,4 +742,107 @@ fn test_zero_heartbeat_interval_returns_typed_error() {
 
     let result = client.try_set_heartbeat_interval(&0, &admin);
     assert_eq!(result, Err(Ok(ContractError::InvalidHeartbeatInterval)));
+}
+
+#[test]
+fn test_expired_signature_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    // Advance ledger past the expiry window
+    advance_ledger_timestamp(&env, 1000);
+    let expired_at: u64 = 500; // already in the past
+
+    let new_wasm_hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+    let (salt, signature) = nonce_proof(&env, 0, b"propose-upgrade-expired");
+    let result = client.try_propose_upgrade(&new_wasm_hash, &admin, &0, &salt, &signature, &expired_at);
+    assert_eq!(result, Err(Ok(ContractError::SignatureExpired)));
+
+    let (salt2, signature2) = nonce_proof(&env, 0, b"set-value-expired");
+    let result = client.try_set_value(&42, &admin, &0, &salt2, &signature2, &expired_at);
+    assert_eq!(result, Err(Ok(ContractError::SignatureExpired)));
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Issue #453 — Bond capacity checks for premium asset pool validator profiles
+// ═════════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_update_validator_profile_succeeds_with_sufficient_stake() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    let node = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    // Stake exactly the minimum required bond.
+    client.stake_and_register(&node, &crate::validation::PREMIUM_POOL_MIN_STAKE);
+
+    let pool = symbol_short!("USDC");
+    // Must not error when stake >= PREMIUM_POOL_MIN_STAKE.
+    client.update_validator_profile(&node, &pool);
+}
+
+#[test]
+fn test_update_validator_profile_blocked_below_min_stake() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    let node = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    // Stake one unit below the required minimum.
+    client.stake_and_register(&node, &(crate::validation::PREMIUM_POOL_MIN_STAKE - 1));
+
+    let pool = symbol_short!("BTC");
+    let result = client.try_update_validator_profile(&node, &pool);
+    assert_eq!(result, Err(Ok(ContractError::PremiumPoolAccessDenied)));
+}
+
+#[test]
+fn test_update_validator_profile_blocked_with_zero_stake() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    let node = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    // Node has never staked — locked stake is 0.
+    let pool = symbol_short!("ETH");
+    let result = client.try_update_validator_profile(&node, &pool);
+    assert_eq!(result, Err(Ok(ContractError::PremiumPoolAccessDenied)));
+}
+
+#[test]
+fn test_update_validator_profile_succeeds_above_min_stake() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, TimeLockedUpgradeContract);
+    let client = TimeLockedUpgradeContractClient::new(&env, &contract_id);
+
+    let admin = soroban_sdk::Address::generate(&env);
+    let node = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin);
+
+    // Stake well above the minimum.
+    client.stake_and_register(&node, &5_000u64);
+
+    let pool = symbol_short!("XLM");
+    client.update_validator_profile(&node, &pool);
+    // Heartbeat for the pool asset should now be fresh.
+    assert!(client.is_data_fresh(&pool));
 }
