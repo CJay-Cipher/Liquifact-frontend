@@ -46,6 +46,9 @@ const NODE_PROFILES_KEY: Symbol = symbol_short!("NODES");
 const PLATFORM_CAPITAL_KEY: Symbol = symbol_short!("CAPITAL");
 const CONSENSUS_CACHE_KEY: Symbol = symbol_short!("CACHE");
 const RELAYER_TTL_THRESHOLD: u32 = 5_000;
+// Telemetry TTL configuration: expire after validation window closes
+const HEARTBEAT_TTL_LEDGERS: u32 = 17_280; // ~24 hours at 5s/ledger
+const HEARTBEAT_TTL_THRESHOLD: u32 = 5_000; // Extend when < 5000 ledgers remain
 
 #[contracttype]
 #[derive(Clone)]
@@ -298,66 +301,6 @@ impl TimeLockedUpgradeContract {
         } else { false }
     }
 
-    pub fn set_value(env: Env, value: u64, admin: Address, nonce: u64, salt: Bytes, salt_signature: BytesN<32>, sig_expires_at: u64) -> Result<(), ContractError> {
-        if env.ledger().timestamp() > sig_expires_at { return Err(ContractError::SignatureExpired); }
-        let mut data = Self::get_data(env.clone())?;
-        if data.admin != admin { return Err(ContractError::NotAdmin); }
-        admin.require_auth();
-        consume_nonce(&env, &admin, nonce, salt, salt_signature);
-        data.value = value;
-        env.storage().instance().set(&DATA_KEY, &data);
-        Self::_record_heartbeat(&env, symbol_short!("VALUE"));
-        Ok(())
-    }
-
-    pub fn get_coordinator_nonce(env: Env, coordinator: Address) -> u64 {
-        get_nonce(&env, &coordinator)
-    }
-
-    pub fn get_pending_upgrade(env: Env) -> Option<PendingUpgrade> {
-        env.storage().instance().get(&PENDING_UPGRADE_KEY)
-    }
-
-    pub fn get_upgrade_timelock_remaining(env: Env) -> Option<u64> {
-        let pending: PendingUpgrade = env.storage().instance().get(&PENDING_UPGRADE_KEY)?;
-        Some(UPGRADE_DELAY_SECONDS.saturating_sub(env.ledger().timestamp().saturating_sub(pending.proposed_at)))
-    }
-
-    pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
-        let data = Self::get_data(env.clone())?;
-        if data.admin != admin { return Err(ContractError::NotAdmin); }
-        admin.require_auth();
-        env.storage().instance().remove(&PENDING_UPGRADE_KEY);
-        Ok(())
-    }
-
-    pub fn set_heartbeat_interval(env: Env, interval: u64, admin: Address) -> Result<(), ContractError> {
-        if interval == 0 { return Err(ContractError::InvalidHeartbeatInterval); }
-        let data = Self::get_data(env.clone())?;
-        if data.admin != admin { return Err(ContractError::NotAdmin); }
-        admin.require_auth();
-        env.storage().instance().set(&HB_INTERVAL_KEY, &interval);
-        Ok(())
-    }
-
-    pub fn get_heartbeat_interval(env: Env) -> u64 {
-        Self::_get_interval(&env)
-    }
-
-    pub fn get_last_update_timestamp(env: Env, asset: Symbol) -> Option<u64> {
-        let timestamps: Map<Symbol, u64> = env.storage().temporary().get(&HEARTBEAT_KEY).unwrap_or_else(|| Map::new(&env));
-        timestamps.get(asset)
-    }
-
-    pub fn get_stake(env: Env, node: Address) -> u64 {
-        let stakes: Map<Address, u64> = env.storage().instance().get(&STAKE_REGISTRY_KEY).unwrap_or_else(|| Map::new(&env));
-        stakes.get(node).unwrap_or(0)
-    }
-
-    pub fn get_total_staked(env: Env) -> u64 {
-        env.storage().instance().get(&TOTAL_STAKED_KEY).unwrap_or(0)
-    }
-
     pub fn upsert_node_profile(env: Env, admin: Address, node: Address, rate: u64, confidence: u32) -> Result<(), ContractError> {
         let data = Self::get_data(env.clone())?;
         if data.admin != admin { return Err(ContractError::NotAdmin); }
@@ -393,6 +336,8 @@ impl TimeLockedUpgradeContract {
     }
 
     pub fn finalize_consensus(env: Env) {
+        // Clean up short-lived consensus cache and telemetry data
+        // These entries in temporary storage will naturally expire based on configured TTL
         env.storage().temporary().remove(&CONSENSUS_CACHE_KEY);
         env.storage().temporary().remove(&HEARTBEAT_KEY);
     }
@@ -422,6 +367,13 @@ impl TimeLockedUpgradeContract {
         let mut timestamps: Map<Symbol, u64> = env.storage().temporary().get(&HEARTBEAT_KEY).unwrap_or_else(|| Map::new(env));
         timestamps.set(asset, env.ledger().timestamp());
         env.storage().temporary().set(&HEARTBEAT_KEY, &timestamps);
+        
+        // Set TTL to ensure entries expire naturally after validation window
+        env.storage().temporary().extend_ttl(
+            &HEARTBEAT_KEY,
+            HEARTBEAT_TTL_THRESHOLD,
+            HEARTBEAT_TTL_LEDGERS,
+        );
     }
 
     fn _get_interval(env: &Env) -> u64 {
@@ -455,13 +407,5 @@ impl TimeLockedUpgradeContract {
     fn _revocation_threshold(env: &Env) -> u32 {
         let n = Self::_get_signers(env).len();
         n / 2 + 1
-    }
-
-    fn assert_contract_is_active(env: &Env) -> Result<(), ContractError> {
-        if env.storage().instance().has(&DATA_KEY) {
-            Ok(())
-        } else {
-            Err(ContractError::NotInitialized)
-        }
     }
 }
