@@ -113,6 +113,9 @@ const MAX_FEE_CEILING: u64 = 1_000_000_000;
 const CONSENSUS_CACHE_KEY: Symbol = symbol_short!("CACHE");
 const SEQUENCE_COUNTER_KEY: Symbol = symbol_short!("SEQ");
 const RELAYER_TTL_THRESHOLD: u32 = 5_000;
+// Telemetry TTL configuration: expire after validation window closes
+const HEARTBEAT_TTL_LEDGERS: u32 = 17_280; // ~24 hours at 5s/ledger
+const HEARTBEAT_TTL_THRESHOLD: u32 = 5_000; // Extend when < 5000 ledgers remain
 
 #[contracttype]
 #[derive(Clone)]
@@ -602,6 +605,8 @@ impl TimeLockedUpgradeContract {
     }
 
     pub fn finalize_consensus(env: Env) {
+        // Clean up short-lived consensus cache and telemetry data
+        // These entries in temporary storage will naturally expire based on configured TTL
         env.storage().temporary().remove(&CONSENSUS_CACHE_KEY);
         env.storage().temporary().remove(&HEARTBEAT_KEY);
     }
@@ -641,6 +646,13 @@ impl TimeLockedUpgradeContract {
         let mut timestamps: Map<AssetId, u64> = env.storage().temporary().get(&HEARTBEAT_KEY).unwrap_or_else(|| Map::new(env));
         timestamps.set(asset, env.ledger().timestamp());
         env.storage().temporary().set(&HEARTBEAT_KEY, &timestamps);
+        
+        // Set TTL to ensure entries expire naturally after validation window
+        env.storage().temporary().extend_ttl(
+            &HEARTBEAT_KEY,
+            HEARTBEAT_TTL_THRESHOLD,
+            HEARTBEAT_TTL_LEDGERS,
+        );
     }
 
     fn _get_interval(env: &Env) -> u64 {
