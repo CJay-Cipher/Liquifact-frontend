@@ -74,3 +74,19 @@ body {
   border-radius: 0.25rem;
 }
 
+/*
+  Honour the OS/browser "reduce motion" preference.
+  Users who enable this setting get paused animations instead of
+  continuous spin/pulse, while the loading indicators stay fully
+  visible (opacity and layout are unchanged).
+  See: https://www.w3.org/WAI/WCAG21/Understanding/animation-from-interactions
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
