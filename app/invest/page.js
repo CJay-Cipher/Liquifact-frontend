@@ -1,78 +1,20 @@
 "use client";
-import Button from '@/components/Button';
 
-import Button from '@/components/Button'
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, Suspense } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import ErrorBanner from "@/components/ErrorBanner";
 import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
 import Pagination from "@/components/Pagination";
-import Button from '@/components/Button'
+import InvoiceSearch from "@/components/InvoiceSearch";
+import InvoiceFilters, { DEFAULT_FILTERS, hasActiveFilters } from "@/components/InvoiceFilters";
 import { copy } from "../copy/en";
-import Button from '@/components/Button'
 import { fetchInvestableInvoices } from "../../lib/api/invoices";
 
-/**
- * Number of invoices rendered per page.  Export allows tests to reference
- * the same constant without hard-coding a magic number.
- */
 export const PAGE_SIZE = 10;
 
-/**
- * Mock invoice data â€” replace with real API call once the backend endpoint
- * is available (follow-up: link backend issue here).
- *
- * Contract per item: { id, issuer, amount, currency, dueDate, yield, status }
- * NOTE: yield values are illustrative; contracts use on-chain basis points and actual settlement is at maturity.
- */
-const MOCK_INVOICES = [
-  {
-    id: "inv-001",
-    issuer: "Acme Supplies Ltd",
-    amount: "12,500",
-    currency: "USD",
-    dueDate: "2026-06-15",
-    yield: "8.2%",
-    status: "Open",
-  },
-  {
-    id: "inv-002",
-    issuer: "Bright Logistics GmbH",
-    amount: "7,800",
-    currency: "EUR",
-    dueDate: "2026-07-01",
-    yield: "7.5%",
-    status: "Open",
-  },
-  {
-    id: "inv-003",
-    issuer: "Sunrise Exports Pte",
-    amount: "22,000",
-    currency: "USD",
-    dueDate: "2026-05-30",
-    yield: "9.1%",
-    status: "Open",
-  },
-];
-
-// DEV-only delay (ms) to make the skeleton visible during local development.
 const DEV_DELAY = process.env.NODE_ENV === "development" ? 1500 : 0;
 
-function loadMockInvoices() {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(MOCK_INVOICES), DEV_DELAY);
-  });
-}
-
-/**
- * Returns the screen-reader announcement text for the initial invoice load.
- *
- * @param {Array} invoices - The resolved invoice array (may be empty).
- * @param {object} [options]
- * @param {boolean} [options.filterActive=false] - Whether an issuer filter is applied.
- * @param {number} [options.filteredCount=0] - Number of invoices matching the current filter.
- * @returns {string}
- */
 export function getInvoiceLoadAnnouncement(
   invoices,
   { filterActive = false, filteredCount = 0 } = {},
@@ -90,43 +32,35 @@ export function getInvoiceLoadAnnouncement(
   return `${invoices.length} investable invoices loaded`;
 }
 
-/**
- * Returns the screen-reader announcement text for the current pagination state.
- *
- * @param {number} shown - Number of invoices currently visible.
- * @param {number} total - Total number of invoices available.
- * @returns {string}
- */
 export function getPaginationAnnouncement(shown, total) {
   return `Showing ${shown} of ${total} investable invoices`;
 }
 
-/**
- * InvestMarketplace â€” main component for the invest page.
- *
- * Fetches invoices via `loadInvoices`, renders them PAGE_SIZE at a time,
- * and exposes a "Load more" control to append the next batch.  Paging
- * resets whenever a new invoice set arrives so filter changes (future) stay
- * non-breaking.
- *
- * @param {object}   props
- * @param {Function} [props.loadInvoices] - Async function that resolves to an
- *   invoice array.  Defaults to the mock loader; injectable for testing.
- * @returns {JSX.Element}
- */
 export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [invoices, setInvoices] = useState(null); // null = loading
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [paginationAnnouncement, setPaginationAnnouncement] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [statusMessage, setStatusMessage] = useState("");
 
-  /** Ref forwarded to the \"Load more\" button for focus management. */
+  const initialSearch = searchParams.get("search") || "";
+  const initialFilters = { ...DEFAULT_FILTERS };
+  for (const key of Object.keys(DEFAULT_FILTERS)) {
+    if (searchParams.has(key)) {
+      initialFilters[key] = searchParams.get(key) || "";
+    }
+  }
+
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialSearch);
+  const [filters, setFilters] = useState(initialFilters);
+
   const loadMoreRef = useRef(null);
 
-  // ——————————————————————————————————————————————————————————————————————————
   useEffect(() => {
     const controller = new AbortController();
     let isActive = true;
@@ -135,9 +69,7 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
       try {
         const nextInvoices = await loadInvoices({ signal: controller.signal });
 
-        if (!isActive) {
-          return;
-        }
+        if (!isActive) return;
 
         const normalizedInvoices = Array.isArray(nextInvoices) ? nextInvoices : [];
 
@@ -145,9 +77,7 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
         setVisibleCount(PAGE_SIZE);
         setPaginationAnnouncement("");
       } catch {
-        if (!isActive) {
-          return;
-        }
+        if (!isActive) return;
 
         setInvoices([]);
         setLoadError(copy.invest.errorDescription);
@@ -163,7 +93,6 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
     };
   }, [loadInvoices]);
 
-  // ——————————————————————————————————————————————————————————————————————————
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
@@ -171,30 +100,110 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // â”€â”€ Load-more handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  /**
-   * Appends the next PAGE_SIZE items and updates the live-region status.
-   * Focus is moved back to the "Load more" button (if it still exists) so
-   * keyboard users do not lose their place in the page.
-   */
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    let changed = false;
+
+    if (debouncedQuery) {
+      if (params.get("search") !== debouncedQuery) {
+        params.set("search", debouncedQuery);
+        changed = true;
+      }
+    } else if (params.has("search")) {
+      params.delete("search");
+      changed = true;
+    }
+
+    for (const key of Object.keys(DEFAULT_FILTERS)) {
+      if (filters[key]) {
+        if (params.get(key) !== filters[key]) {
+          params.set(key, filters[key]);
+          changed = true;
+        }
+      } else if (params.has(key)) {
+        params.delete(key);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+  }, [debouncedQuery, filters, pathname, router, searchParams]);
+
+  const handleSearchChange = useCallback((value) => {
+    setSearchQuery(value);
+    setVisibleCount(PAGE_SIZE);
+  }, []);
+
+  const handleFilterChange = useCallback((newFilters) => {
+    setFilters(newFilters);
+    setVisibleCount(PAGE_SIZE);
+  }, []);
+
+  const allInvoices = invoices || [];
+  
+  let filteredInvoices = allInvoices.filter((inv) => {
+    if (debouncedQuery && !inv.issuer.toLowerCase().includes(debouncedQuery.toLowerCase())) {
+      return false;
+    }
+    if (filters.yieldMin && parseFloat(inv.yield) < parseFloat(filters.yieldMin)) {
+      return false;
+    }
+    if (filters.yieldMax && parseFloat(inv.yield) > parseFloat(filters.yieldMax)) {
+      return false;
+    }
+    if (filters.currency && inv.currency !== filters.currency) {
+      return false;
+    }
+    if (filters.maturityFrom && new Date(inv.dueDate) < new Date(filters.maturityFrom)) {
+      return false;
+    }
+    if (filters.maturityTo && new Date(inv.dueDate) > new Date(filters.maturityTo)) {
+      return false;
+    }
+    return true;
+  });
+
+  if (filters.sort) {
+    filteredInvoices = [...filteredInvoices].sort((a, b) => {
+      const yieldA = parseFloat(a.yield) || 0;
+      const yieldB = parseFloat(b.yield) || 0;
+      const amountA = parseFloat(a.amount.replace(/,/g, '')) || 0;
+      const amountB = parseFloat(b.amount.replace(/,/g, '')) || 0;
+
+      switch (filters.sort) {
+        case 'yield_desc': return yieldB - yieldA;
+        case 'yield_asc': return yieldA - yieldB;
+        case 'amount_desc': return amountB - amountA;
+        case 'amount_asc': return amountA - amountB;
+        case 'maturity_asc': return a.dueDate.localeCompare(b.dueDate);
+        case 'maturity_desc': return b.dueDate.localeCompare(a.dueDate);
+        default: return 0;
+      }
+    });
+  }
+
+  const visibleInvoices = filteredInvoices.slice(0, visibleCount);
+
+  useEffect(() => {
+    if (invoices !== null) {
+      const isFiltered = debouncedQuery !== "" || hasActiveFilters(filters);
+      setStatusMessage(getInvoiceLoadAnnouncement(allInvoices, { filterActive: isFiltered, filteredCount: filteredInvoices.length }));
+    }
+  }, [invoices, debouncedQuery, filters, allInvoices.length, filteredInvoices.length]);
+
   const handleLoadMore = useCallback(() => {
     setVisibleCount((prev) => {
-      const next = Math.min(prev + PAGE_SIZE, invoices?.length ?? prev);
-      const total = invoices?.length ?? 0;
-      setStatusMessage(getPaginationAnnouncement(next, total));
+      const next = Math.min(prev + PAGE_SIZE, filteredInvoices.length);
+      setStatusMessage(getPaginationAnnouncement(next, filteredInvoices.length));
       return next;
     });
 
-    // Restore focus on next tick so the button is still in the DOM when we focus it.
     setTimeout(() => {
       loadMoreRef.current?.focus();
     }, 0);
-  }, [invoices]);
-
-  // â”€â”€ Derived values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const visibleInvoices = Array.isArray(invoices)
-    ? invoices.slice(0, visibleCount)
-    : [];
+  }, [filteredInvoices.length]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -215,7 +224,6 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
           {statusMessage}
         </p>
 
-        {/* Filter Controls */}
         <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6">
           <div className="flex flex-wrap gap-4 items-center">
             <InvoiceSearch
@@ -224,7 +232,7 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
             />
             <InvoiceFilters
               filters={filters}
-              onFilterChange={setFilters}
+              onFilterChange={handleFilterChange}
               onClearFilters={() => setFilters(DEFAULT_FILTERS)}
             />
           </div>
@@ -246,7 +254,7 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
         ) : (
           <>
             <ul className="space-y-4">
-              {filteredInvoices.map((inv) => (
+              {visibleInvoices.map((inv) => (
                 <li key={inv.id}>
                   <Link
                     href={`/invest/${inv.id}`}
@@ -291,6 +299,9 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
 }
 
 export default function InvestPage() {
-  return <InvestMarketplace />;
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <InvestMarketplace />
+    </Suspense>
+  );
 }
-
