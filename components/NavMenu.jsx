@@ -59,6 +59,22 @@ export default function NavMenu() {
     return () => clearTimeout(t);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    // Mobile-only disclosure: when the panel opens, place focus on the first
+    // available menu link so keyboard users land inside the revealed content.
+    const raf = requestAnimationFrame(() => {
+      const firstFocusable = menuRef.current?.querySelector("a[href], button:not([disabled])");
+      firstFocusable?.focus();
+      if (!firstFocusable) {
+        menuRef.current?.focus();
+      }
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [open]);
+
   // Close on Escape and return focus to toggle
   useEffect(() => {
     if (!open) return;
@@ -86,6 +102,7 @@ export default function NavMenu() {
         !toggleRef.current.contains(e.target)
       ) {
         setOpenPathname(null);
+        toggleRef.current?.focus();
       }
     };
 
@@ -198,6 +215,7 @@ export default function NavMenu() {
         <nav
           id="mobile-menu"
           ref={menuRef}
+          tabIndex={-1}
           aria-label="Mobile navigation"
           style={{
             transition: "opacity 0.2s ease, transform 0.2s ease",

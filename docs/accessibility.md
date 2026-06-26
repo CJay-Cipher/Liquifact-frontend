@@ -6,7 +6,7 @@ LiquiFact Frontend is committed to meeting **WCAG 2.1 AA** accessibility sta
 
 ## Keyboard & Screen‑Reader Patterns
 
-- **Focus Management** – Interactive elements receive a visible focus ring (`outline: 2px solid var(--color-primary)`); focus order follows logical DOM structure.
+- **Focus Management** – Interactive elements receive a visible focus ring (`outline: 2px solid var(--color-primary)`); focus order follows logical DOM structure. The mobile `NavMenu` disclosure moves focus to the first revealed menu link on open and returns focus to the toggle button on close.
 - **ARIA Live Regions** – Used in `components/UploadZone.jsx`, `components/WalletStatus.jsx`, and `app/invest/page.js` to announce status updates to assistive technologies.
 - **Landmarks** – Page layouts employ semantic HTML landmarks (`<header>`, `<main>`, `<nav>`, `<footer>`) for easy navigation.
 - **Form Labels** – All form controls include associated `<label>` elements or `aria-label` attributes.
