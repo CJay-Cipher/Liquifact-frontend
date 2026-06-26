@@ -15,7 +15,7 @@ export const copy = {
       connected: "Connected",
       degraded: "Degraded",
       unreachable: "Unreachable",
-      viewDetails: "View details",
+      rawResponse: "Raw response",
     },
   },
   invest: {
@@ -50,8 +50,6 @@ export const copy = {
     contactUrl: "mailto:support@liquifact.com",
     discord: "Discord Community",
     discordUrl: "https://discord.gg/JrGPH4V3",
-  }
-    contact: "Contact Support",
   },
   uploadZone: {
     requirementsTitle: "Upload requirements",
@@ -90,10 +88,8 @@ export const copy = {
     toastErrorTitle: "Connection failed",
     toastErrorMsg: "Failed to connect to wallet. Please try again.",
     toastWrongNetworkTitle: "Wrong network",
-    toastWrongNetworkMsg:
-      "Wallet is connected to testnet. Please switch to public network.",
+    toastWrongNetworkMsg: "Wallet is connected to testnet. Please switch to public network.",
     errorConnect: "Failed to connect to wallet. Please try again.",
-    errorWrongNetwork:
-      "Wallet is connected to testnet. Please switch to public network.",
+    errorWrongNetwork: "Wallet is connected to testnet. Please switch to public network.",
   },
 };

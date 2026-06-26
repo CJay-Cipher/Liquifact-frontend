@@ -17,7 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: "LiquiFact — Global Invoice Liquidity on Stellar",
-  description: "Tokenized invoice financing for SMEs. Unlock liquidity from unpaid invoices on the Stellar network.",
+  description:
+    "Tokenized invoice financing for SMEs. Unlock liquidity from unpaid invoices on the Stellar network.",
 };
 
 /**
@@ -61,9 +62,7 @@ export default function RootLayout({ children }) {
           Skip to content
         </a>
         <ToastProvider>
-          <WalletProvider>
-            {children}
-          </WalletProvider>
+          <WalletProvider>{children}</WalletProvider>
         </ToastProvider>
         {/* Theme toggle — fixed to top-right, above all other content */}
         <div className="fixed top-3 right-16 z-50 md:right-20">

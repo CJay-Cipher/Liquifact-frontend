@@ -1,21 +1,27 @@
-# Filter Controls - Implementation Contract
+# Filter Contracts
+
+This document outlines the expected data shapes and processing complexities for the `useInvoiceFilters` hook, which powers the Liquifact Marketplace searching, filtering, and sorting purely on the client side.
 
 ## Current State
 Filter controls are fully interactive. Sort order for the **Amount** and **Yield** columns supports an ascending/descending direction toggle.
 
-## Filter Controls Implemented
+## 1. Invoice Object Schema
+The marketplace currently maps to the following object structure. The hook expects this exact shape when performing derived state calculations.
 
 ### 1. Yield Range Filter
+
 - **Purpose**: Filter invoices by yield percentage range
 - **Future API Contract**: `GET /api/invoices?yield_min=5&yield_max=10`
 - **UI State**: Active
 
 ### 2. Currency Filter
+
 - **Purpose**: Filter invoices by currency type (USD, EUR, etc.)
 - **Future API Contract**: `GET /api/invoices?currency=USD,EUR`
 - **UI State**: Active
 
 ### 3. Maturity Date Filter
+
 - **Purpose**: Filter invoices by maturity date range
 - **Future API Contract**: `GET /api/invoices?maturity_from=2026-06-01&maturity_to=2026-12-31`
 - **UI State**: Active
@@ -61,6 +67,7 @@ Pure function that returns a sorted copy of invoice list. Does **not** mutate th
 - High contrast design follows existing slate/cyan theme
 
 ## Responsive Design
+
 - Filter controls wrap on smaller screens using `flex-wrap`
 - Direction toggles sit inline next to the sort select
 
@@ -71,6 +78,7 @@ Pure function that returns a sorted copy of invoice list. Does **not** mutate th
 - Follows slate-950/cyan-400 color scheme
 
 ## Backend Integration Requirements
+
 When implementing the backend:
 1. Accept `sort` (column name) and `sort_dir` (`asc`|`desc`) query parameters
 2. Create API endpoints that support the filter query parameters above

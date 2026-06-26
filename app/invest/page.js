@@ -1,19 +1,19 @@
+// client directive
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Button from "@/components/Button";
 import ErrorBanner from "@/components/ErrorBanner";
+import InvoiceCard from "@/components/InvoiceCard";
 import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
 import Pagination from "@/components/Pagination";
 import InvoiceFilters, { DEFAULT_FILTERS, parseSortState } from "@/components/InvoiceFilters";
 import { copy } from "../copy/en";
 import { fetchInvestableInvoices } from "../../lib/api/invoices";
+import InvoiceSearch from "@/components/InvoiceSearch";
+import InvoiceFilters, { DEFAULT_FILTERS, hasActiveFilters } from "@/components/InvoiceFilters";
 
-/**
- * Number of invoices rendered per page.  Export allows tests to reference
- * the same constant without hard-coding a magic number.
- */
 export const PAGE_SIZE = 10;
 
 /**
@@ -56,46 +56,18 @@ const MOCK_INVOICES = [
 // DEV-only delay (ms) to make the skeleton visible during local development.
 const DEV_DELAY = process.env.NODE_ENV === "development" ? 1500 : 0;
 
-function loadMockInvoices() {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(MOCK_INVOICES), DEV_DELAY);
-  });
-}
-
-/**
- * Returns the screen-reader announcement text for the initial invoice load.
- *
- * @param {Array} invoices - The resolved invoice array (may be empty).
- * @param {object} [options]
- * @param {boolean} [options.filterActive=false] - Whether an issuer filter is applied.
- * @param {number} [options.filteredCount=0] - Number of invoices matching the current filter.
- * @returns {string}
- */
 export function getInvoiceLoadAnnouncement(
   invoices,
-  { filterActive = false, filteredCount = 0 } = {},
+  { filterActive = false, filteredCount = 0 } = {}
 ) {
   if (!Array.isArray(invoices) || invoices.length === 0) {
     return "No invoices available";
   }
-
-  if (filterActive) {
-    return filteredCount === 0
-      ? "No invoices match"
-      : `${filteredCount} of ${invoices.length} invoices match`;
-  }
-
   return `${invoices.length} investable invoices loaded`;
 }
 
-/**
- * Returns the screen-reader announcement text for the current pagination state.
- *
- * @param {number} shown - Number of invoices currently visible.
- * @param {number} total - Total number of invoices available.
- * @returns {string}
- */
 export function getPaginationAnnouncement(shown, total) {
+  if (total === 0) return "No invoices available";
   return `Showing ${shown} of ${total} investable invoices`;
 }
 
@@ -162,14 +134,28 @@ export function applySortToList(list, filters) {
  * @returns {JSX.Element}
  */
 export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [invoices, setInvoices] = useState(null); // null = loading
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [statusMessage, setStatusMessage] = useState("");
   const [paginationAnnouncement, setPaginationAnnouncement] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [statusMessage, setStatusMessage] = useState("");
+
+  const initialSearch = searchParams.get("search") || "";
+  const initialFilters = { ...DEFAULT_FILTERS };
+  for (const key of Object.keys(DEFAULT_FILTERS)) {
+    if (searchParams.has(key)) {
+      initialFilters[key] = searchParams.get(key) || "";
+    }
+  }
+
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialSearch);
+  const [filters, setFilters] = useState(initialFilters);
 
   /** Ref forwarded to the "Load more" button for focus management. */
   const loadMoreRef = useRef(null);
@@ -183,23 +169,18 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
       try {
         const nextInvoices = await loadInvoices({ signal: controller.signal });
 
-        if (!isActive) {
-          return;
-        }
+        if (!isActive) return;
 
         const normalizedInvoices = Array.isArray(nextInvoices) ? nextInvoices : [];
 
         setInvoices(normalizedInvoices);
         setVisibleCount(PAGE_SIZE);
-        setPaginationAnnouncement("");
       } catch {
-        if (!isActive) {
-          return;
-        }
+        if (!isActive) return;
 
-        setInvoices([]);
+        setInvoices(null);
         setLoadError(copy.invest.errorDescription);
-        setPaginationAnnouncement("");
+        setStatusMessage(copy.invest.errorStatus);
       }
     };
 
@@ -215,7 +196,7 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
-    }, 200);
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -231,9 +212,9 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
    */
   const handleLoadMore = useCallback(() => {
     setVisibleCount((prev) => {
-      const next = Math.min(prev + PAGE_SIZE, invoices?.length ?? prev);
-      const total = invoices?.length ?? 0;
-      setStatusMessage(getPaginationAnnouncement(next, total));
+      const next = Math.min(prev + PAGE_SIZE, filteredInvoices.length || prev);
+      const total = filteredInvoices.length;
+      setPaginationAnnouncement(getPaginationAnnouncement(next, total));
       return next;
     });
 
@@ -309,12 +290,11 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
           {statusMessage}
         </p>
 
-        {/* Filter Controls */}
         <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6">
           <div className="flex flex-wrap gap-4 items-center">
             <InvoiceFilters
               filters={filters}
-              onFilterChange={setFilters}
+              onFilterChange={handleFilterChange}
               onClearFilters={() => setFilters(DEFAULT_FILTERS)}
             />
           </div>
@@ -330,9 +310,13 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
         ) : invoices === null ? (
           <InvoiceListSkeleton rows={3} />
         ) : allInvoices.length === 0 ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-8 text-center text-slate-300">{copy.invest.emptyState}</div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-8 text-center text-slate-300">
+            {copy.invest.emptyState}
+          </div>
         ) : filteredInvoices.length === 0 ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-8 text-center text-slate-300">No invoices match your filters.</div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-8 text-center text-slate-300">
+            No invoices match your filters.
+          </div>
         ) : (
           <>
             <ul className="space-y-4">
@@ -344,9 +328,7 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
                     aria-label={`View details for ${inv.issuer} invoice ${inv.id}`}
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <span className="font-medium text-slate-100">
-                        {inv.issuer}
-                      </span>
+                      <span className="font-medium text-slate-100">{inv.issuer}</span>
                       <span className="text-xs font-semibold px-2 py-1 rounded-full bg-cyan-900/60 text-cyan-300">
                         {inv.status}
                       </span>
@@ -371,7 +353,8 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
             />
 
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/30 p-4 text-sm text-slate-300">
-              Note: Yield references are educational only and reflect on-chain basis-point assumptions. Invoice contracts settle at maturity.
+              Note: Yield references are educational only and reflect on-chain basis-point
+              assumptions. Invoice contracts settle at maturity.
             </div>
           </>
         )}
@@ -381,5 +364,9 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
 }
 
 export default function InvestPage() {
-  return <InvestMarketplace />;
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <InvestMarketplace />
+    </Suspense>
+  );
 }
