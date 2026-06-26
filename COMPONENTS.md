@@ -62,12 +62,21 @@ Site footer with navigation links (Docs, System Status, Contact Support). Links 
 
 ### Props
 
-None.
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `links` | `Array<{label:string, href:string, external?:boolean}>` | `undefined` (uses default links) | Optional custom links array. Allows passing internal links (with `external: false`) to render via Next `Link`.
+
+> **Note:** When `external` is omitted or set to `true`, the link is rendered as a normal `<a>` with `target="_blank"` and `rel="noopener noreferrer"` for security.
 
 ### Example
 
 ```jsx
 <Footer />
+
+// Custom internal link example
+<Footer
+  links={[{ label: 'Home', href: '/', external: false }]}
+/>
 ```
 
 ---
