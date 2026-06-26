@@ -12,6 +12,10 @@ const INVOICE_STATUSES = {
   SETTLED: 'Settled',
 };
 
+const user={
+name:'boss'
+}
+
 const STATUS_STYLES = {
   [INVOICE_STATUSES.PENDING_TOKENIZATION]:
     'bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/20',
