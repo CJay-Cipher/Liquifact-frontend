@@ -37,15 +37,25 @@ Part of the LiquiFact stack: **frontend** (this repo) | **backend** (Express API
 
 ## Development
 
-| Command            | Description                     |
-|-------------------|---------------------------------|
-| `npm run dev`     | Start dev server (Turbopack)   |
-| `npm run lint`    | Run ESLint                      |
-| `npm test`        | Run accessibility tests (Jest) |
-| `npm run build`   | Production build                |
-| `npm run start`   | Start production server         |
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start dev server (Turbopack) |
+| `npm run lint` | Run ESLint |
+| `npm test` | Run Jest/jsdom unit and accessibility tests |
+| `npm run build` | Production build |
+| `npm run start` | Start production server |
+| `npm run test:e2e` | Run Playwright smoke tests |
 
-Default: http://localhost:3000. The home page can check API health at `NEXT_PUBLIC_API_URL` (default http://localhost:3001).
+### Environment variables
+
+| Variable | Required | Default | Used by |
+| --- | --- | --- | --- |
+| `NEXT_PUBLIC_API_URL` | No | `http://localhost:3001` | [app/page.js](app/page.js) |
+| `NEXT_PUBLIC_STELLAR_NETWORK` | No | Unset | [WALLET_INTEGRATION_CONTRACT.md](WALLET_INTEGRATION_CONTRACT.md) |
+
+`NEXT_PUBLIC_*` values are exposed to the browser and must never contain secrets.
+
+Default: http://localhost:3000. The home page can check API health at `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`).
 
 ---
 
@@ -210,13 +220,23 @@ For frontend/backend contract details see:
 
 ## Development
 
-| Command            | Description                  |
-| ------------------ | ---------------------------- |
-| `npm run dev`      | Start dev server (Turbopack) |
-| `npm run build`    | Production build             |
-| `npm run start`    | Start production server      |
-| `npm run lint`     | Run ESLint                   |
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start dev server (Turbopack) |
+| `npm run lint` | Run ESLint |
+| `npm test` | Run Jest/jsdom unit and accessibility tests |
+| `npm run build` | Production build |
+| `npm run start` | Start production server |
 | `npm run test:e2e` | Run Playwright smoke tests (toast & invest marketplace) |
+
+### Environment variables
+
+| Variable | Required | Default | Used by |
+| --- | --- | --- | --- |
+| `NEXT_PUBLIC_API_URL` | No | `http://localhost:3001` | [app/page.js](app/page.js) |
+| `NEXT_PUBLIC_STELLAR_NETWORK` | No | Unset | [WALLET_INTEGRATION_CONTRACT.md](WALLET_INTEGRATION_CONTRACT.md) |
+
+`NEXT_PUBLIC_*` values are exposed to the browser and must never contain secrets.
 
 Default: [http://localhost:3000](http://localhost:3000). The home page can check API health at `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`).
 
