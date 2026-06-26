@@ -1,14 +1,15 @@
-"use client";
-import Button from "../../components/Button";
+﻿"use client";
+import Button from '@/components/Button';
 
-import { useEffect, useState, useMemo } from "react";
+import Button from '@/components/Button'
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import ErrorBanner from "../../components/ErrorBanner";
-import InvoiceListSkeleton from "../../components/InvoiceListSkeleton";
-import InvoiceSearch from "../../components/InvoiceSearch";
-import NavMenu from "../../components/NavMenu";
-import InvoiceFilters, { DEFAULT_FILTERS, hasActiveFilters } from "../../components/InvoiceFilters";
+import ErrorBanner from "@/components/ErrorBanner";
+import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
+import Pagination from "@/components/Pagination";
+import Button from '@/components/Button'
 import { copy } from "../copy/en";
+import Button from '@/components/Button'
 import { loadMockInvoices } from "./lib";
 
 /**
@@ -16,7 +17,52 @@ import { loadMockInvoices } from "./lib";
  * the same constant without hard-coding a magic number.
  */
 export const PAGE_SIZE = 10;
-export const SEARCH_DEBOUNCE_MS = 200;
+
+/**
+ * Mock invoice data â€” replace with real API call once the backend endpoint
+ * is available (follow-up: link backend issue here).
+ *
+ * Contract per item: { id, issuer, amount, currency, dueDate, yield, status }
+ * NOTE: yield values are illustrative; contracts use on-chain basis points and actual settlement is at maturity.
+ */
+const MOCK_INVOICES = [
+  {
+    id: "inv-001",
+    issuer: "Acme Supplies Ltd",
+    amount: "12,500",
+    currency: "USD",
+    dueDate: "2026-06-15",
+    yield: "8.2%",
+    status: "Open",
+  },
+  {
+    id: "inv-002",
+    issuer: "Bright Logistics GmbH",
+    amount: "7,800",
+    currency: "EUR",
+    dueDate: "2026-07-01",
+    yield: "7.5%",
+    status: "Open",
+  },
+  {
+    id: "inv-003",
+    issuer: "Sunrise Exports Pte",
+    amount: "22,000",
+    currency: "USD",
+    dueDate: "2026-05-30",
+    yield: "9.1%",
+    status: "Open",
+  },
+];
+
+// DEV-only delay (ms) to make the skeleton visible during local development.
+const DEV_DELAY = process.env.NODE_ENV === "development" ? 1500 : 0;
+
+function loadMockInvoices() {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(MOCK_INVOICES), DEV_DELAY);
+  });
+}
 
 /**
  * Returns the screen-reader announcement text for the initial invoice load.
@@ -56,7 +102,7 @@ export function getPaginationAnnouncement(shown, total) {
 }
 
 /**
- * InvestMarketplace — main component for the invest page.
+ * InvestMarketplace â€” main component for the invest page.
  *
  * Fetches invoices via `loadInvoices`, renders them PAGE_SIZE at a time,
  * and exposes a "Load more" control to append the next batch.  Paging
@@ -80,17 +126,7 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
   /** Ref forwarded to the "Load more" button for focus management. */
   const loadMoreRef = useRef(null);
 
-  useEffect(() => {
-    // Debounce the issuer filter so typing stays instant while list filtering
-    // and announcements only update after the user pauses input.
-    const timer = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-    }, SEARCH_DEBOUNCE_MS);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // ── Fetch invoices ────────────────────────────────────────────────────────
+  // â”€â”€ Fetch invoices â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     let isActive = true;
 
@@ -125,7 +161,7 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
     };
   }, [loadInvoices]);
 
-  // ── Reset paging when a new invoice set arrives ───────────────────────────
+  // â”€â”€ Reset paging when a new invoice set arrives â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
@@ -133,96 +169,30 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const filteredInvoices = useMemo(() => {
-    if (!Array.isArray(invoices)) return [];
-
-    let result = invoices;
-
-    if (debouncedQuery.trim()) {
-      const q = debouncedQuery.trim().toLowerCase();
-      result = result.filter((inv) => inv.issuer.toLowerCase().includes(q));
-    }
-
-    if (filters.yieldMin !== "") {
-      const min = parseFloat(filters.yieldMin);
-      if (!isNaN(min)) {
-        result = result.filter((inv) => {
-          const y = parseFloat(inv.yield);
-          return !isNaN(y) && y >= min;
-        });
-      }
-    }
-
-    if (filters.yieldMax !== "") {
-      const max = parseFloat(filters.yieldMax);
-      if (!isNaN(max)) {
-        result = result.filter((inv) => {
-          const y = parseFloat(inv.yield);
-          return !isNaN(y) && y <= max;
-        });
-      }
-    }
-
-    if (filters.currency) {
-      result = result.filter((inv) => inv.currency === filters.currency);
-    }
-
-    if (filters.maturityFrom) {
-      const from = new Date(filters.maturityFrom);
-      result = result.filter((inv) => new Date(inv.dueDate) >= from);
-    }
-
-    if (filters.maturityTo) {
-      const to = new Date(filters.maturityTo);
-      result = result.filter((inv) => new Date(inv.dueDate) <= to);
-    }
-
-    if (filters.sort) {
-      result = [...result].sort((a, b) => {
-        switch (filters.sort) {
-          case "yield_desc":
-            return parseFloat(b.yield) - parseFloat(a.yield);
-          case "yield_asc":
-            return parseFloat(a.yield) - parseFloat(b.yield);
-          case "amount_desc":
-            return (
-              parseFloat(b.amount.replace(/,/g, "")) -
-              parseFloat(a.amount.replace(/,/g, ""))
-            );
-          case "amount_asc":
-            return (
-              parseFloat(a.amount.replace(/,/g, "")) -
-              parseFloat(b.amount.replace(/,/g, ""))
-            );
-          case "maturity_asc":
-            return new Date(a.dueDate) - new Date(b.dueDate);
-          case "maturity_desc":
-            return new Date(b.dueDate) - new Date(a.dueDate);
-          default:
-            return 0;
-        }
-      });
-    }
-
-    return result;
-  }, [invoices, debouncedQuery, filters]);
-
-  const filterActive =
-    hasActiveFilters(filters) || Boolean(debouncedQuery.trim());
-
-  const statusMessage = (() => {
-    if (invoices === null) return "";
-    if (loadError) return "Unable to load investable invoices.";
-    return getInvoiceLoadAnnouncement(invoices, {
-      filterActive,
-      filteredCount: filteredInvoices.length,
+  // â”€â”€ Load-more handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  /**
+   * Appends the next PAGE_SIZE items and updates the live-region status.
+   * Focus is moved back to the "Load more" button (if it still exists) so
+   * keyboard users do not lose their place in the page.
+   */
+  const handleLoadMore = useCallback(() => {
+    setVisibleCount((prev) => {
+      const next = Math.min(prev + PAGE_SIZE, invoices?.length ?? prev);
+      const total = invoices?.length ?? 0;
+      setStatusMessage(getPaginationAnnouncement(next, total));
+      return next;
     });
 
     // Restore focus on next tick so the button is still in the DOM when we focus it.
     setTimeout(() => {
       loadMoreRef.current?.focus();
     }, 0);
-  }, [filteredInvoices.length]);
+  }, [invoices]);
+
+  // â”€â”€ Derived values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const visibleInvoices = Array.isArray(invoices)
+    ? invoices.slice(0, visibleCount)
+    : [];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -321,3 +291,4 @@ export function InvestMarketplace({ loadInvoices = loadMockInvoices }) {
 export default function InvestPage() {
   return <InvestMarketplace />;
 }
+

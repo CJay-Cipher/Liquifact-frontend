@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { useToast } from './ToastProvider';
@@ -139,30 +139,7 @@ export default function WalletStatus() {
 
   const config = getStateConfig(walletState);
 
-  const getButtonStyles = (variant) => {
-    const baseStyles =
-      'rounded-full px-4 py-3 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950';
 
-    switch (variant) {
-      case 'primary':
-        return `${baseStyles} bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 focus:ring-cyan-500 ${config.disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
-
-      case 'secondary':
-        return `${baseStyles} border border-slate-600 text-slate-300 hover:bg-slate-800 focus:ring-slate-500`;
-
-      case 'loading':
-        return `${baseStyles} bg-cyan-500/30 text-cyan-300 cursor-wait`;
-
-      case 'warning':
-        return `${baseStyles} bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 focus:ring-amber-500`;
-
-      case 'external':
-        return `${baseStyles} bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 focus:ring-violet-500`;
-
-      default:
-        return getButtonStyles('primary');
-    }
-  };
 
   const handleClick = () => {
     switch (walletState) {

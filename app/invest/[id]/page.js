@@ -1,13 +1,18 @@
-"use client";
+﻿"use client";
 
+import Button from '@/components/Button'
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Button from '@/components/Button'
 import { useParams, notFound } from "next/navigation";
 import ErrorBanner from "@/components/ErrorBanner";
 import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
 import WalletStatus from "@/components/WalletStatus";
-import { useWallet, WALLET_STATES } from "@/components/WalletProvider";
+import Button from '@/components/Button'
+import { useWallet, WALLET_STATES } from "@/components/WalletContext";
+import Button from '@/components/Button'
 import { copy } from "../../copy/en";
+import Button from '@/components/Button'
 import { getInvoiceById } from "../lib";
 
 // DEV-only delay (ms) to make the skeleton visible during local development.
@@ -84,7 +89,7 @@ export function InvoiceDetail({ loadInvoice = loadInvoiceById }) {
           href="/"
           className="inline-block py-3 text-xl font-semibold tracking-tight text-cyan-400 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
         >
-          ← LiquiFact
+          â† LiquiFact
         </Link>
         <WalletStatus />
       </header>
@@ -95,7 +100,7 @@ export function InvoiceDetail({ loadInvoice = loadInvoiceById }) {
           className="inline-block mb-6 text-sm text-slate-400 hover:text-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
           aria-label="Back to marketplace"
         >
-          ← Back to marketplace
+          â† Back to marketplace
         </Link>
 
         <h1 className="text-2xl font-bold mb-2">Invoice details</h1>
@@ -171,3 +176,4 @@ export function InvoiceDetail({ loadInvoice = loadInvoiceById }) {
 export default function InvoiceDetailPage() {
   return <InvoiceDetail />;
 }
+
