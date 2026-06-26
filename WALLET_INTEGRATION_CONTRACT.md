@@ -1,5 +1,7 @@
 # Wallet Integration Contract
 
+> **Developer guide:** [`docs/wallet-developer-guide.md`](docs/wallet-developer-guide.md) — state machine diagram, public `useWallet()` API reference, component architecture, and testing notes.
+
 ## Overview
 
 This document outlines the contract for implementing actual Stellar wallet integration in the Liquifact frontend. The current UI implementation uses mock data and states for development and testing.
