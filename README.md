@@ -143,7 +143,7 @@ The `Footer` component now renders real destination links sourced from `app/copy
 
 ## Design Tokens
 
-Global tokens are defined in `app/globals.css` and used across all components.
+Global tokens are defined in `app/globals.css` and used across all components. For a comprehensive, detailed list of all colors, spacing, radii, and typography tokens, see the [Design Token Reference](docs/design-tokens.md) document.
 
 | Token             | Value     | Tailwind equivalent |
 | ----------------- | --------- | ------------------- |
@@ -474,6 +474,8 @@ export default function MyPage() {
 ```
 
 ## Design Tokens
+
+Global tokens are defined in `app/globals.css` and used across all components. For a comprehensive, detailed list of all colors, spacing, radii, and typography tokens, see the [Design Token Reference](docs/design-tokens.md) document.
 
 - **Colors**
   - `--color-bg`: `#020617` (slate‑950)
