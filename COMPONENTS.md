@@ -6,6 +6,7 @@ Shared UI components for the LiquiFact frontend. All components live under `comp
 
 ## Table of Contents
 
+- [EmptyState](#emptystate)
 - [ErrorBanner](#errorbanner)
 - [Footer](#footer)
 - [InvoiceListSkeleton](#invoicelistskeleton)
@@ -13,6 +14,57 @@ Shared UI components for the LiquiFact frontend. All components live under `comp
 - [ToastProvider / useToast](#toastprovider--usetoast)
 - [UploadZone](#uploadzone)
 - [WalletStatus](#walletstatus)
+
+---
+
+## EmptyState
+
+A reusable empty-state panel with an icon slot, heading, description, and an action element. Used whenever a list or page region has no content to show.
+
+**File:** `components/EmptyState.jsx`
+
+### Named exports
+
+| Export                     | Description                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| `default` (`EmptyState`)   | The reusable empty-state container component                                         |
+| `InvoiceEmptyIllustration` | Decorative inline SVG of an empty document tray; always rendered with `aria-hidden` |
+
+### Props (`EmptyState`)
+
+| Prop          | Type        | Default | Description                                                                                        |
+| ------------- | ----------- | ------- | -------------------------------------------------------------------------------------------------- |
+| `title`       | `string`    | —       | **Required.** Heading text shown in the panel (rendered as `<h3>`)                                 |
+| `description` | `string`    | —       | Optional supporting paragraph below the title                                                      |
+| `icon`        | `ReactNode` | —       | Decorative icon or SVG placed above the title. SVGs should include `aria-hidden="true"`            |
+| `action`      | `ReactNode` | —       | CTA element (link or button) rendered below the description                                        |
+| `className`   | `string`    | `''`    | Additional Tailwind classes forwarded to the root `<div>` alongside the component's default styles |
+
+### Accessibility
+
+- The `icon` slot is purely decorative — always pass `aria-hidden="true"` and `focusable="false"` on the SVG.
+- The action element must be a focusable element (`<a>` or `<button>`). Include `focus-visible:outline` classes to meet WCAG 2.1 §2.4.11.
+- The title is rendered as `<h3>` — ensure the surrounding page hierarchy is correct (usually inside a `<section>` headed by `<h2>`).
+
+### Example
+
+```jsx
+import EmptyState, { InvoiceEmptyIllustration } from '@/components/EmptyState';
+
+<EmptyState
+  icon={<InvoiceEmptyIllustration />}
+  title="No invoices yet"
+  description="Upload your first invoice to get started."
+  action={
+    <a
+      href="#invoice-upload-btn"
+      className="rounded-xl border border-cyan-700 bg-cyan-900/30 px-5 py-2.5 text-sm font-semibold text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+    >
+      Upload your first invoice
+    </a>
+  }
+/>
+```
 
 ---
 

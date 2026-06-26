@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import ErrorBanner from './ErrorBanner';
+import EmptyState, { InvoiceEmptyIllustration } from './EmptyState';
 import InvoiceListSkeleton from './InvoiceListSkeleton';
 import { copy } from '../app/copy/en';
 
@@ -176,9 +177,19 @@ export default function InvoiceList({
       {invoices === null && mergedInvoices.length === 0 ? (
         <InvoiceListSkeleton rows={3} />
       ) : mergedInvoices.length === 0 ? (
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center text-slate-300">
-          {copy.invoices.emptyState}
-        </div>
+        <EmptyState
+          icon={<InvoiceEmptyIllustration />}
+          title="No invoices yet"
+          description="Upload your first invoice to get started. It will appear here once tokenized."
+          action={
+            <a
+              href="#invoice-upload-btn"
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-700 bg-cyan-900/30 px-5 py-2.5 text-sm font-semibold text-cyan-300 transition-colors hover:bg-cyan-800/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+            >
+              Upload your first invoice
+            </a>
+          }
+        />
       ) : (
         <ul className="space-y-4">
           {mergedInvoices.map((invoice) => {
