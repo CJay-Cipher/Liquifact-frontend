@@ -4167,6 +4167,7 @@ mod callbacks;
 mod delegate_tests;
 pub mod math;
 mod median;
+mod slashing;
 pub mod slashing;
 mod test;
 mod types;
