@@ -1,9 +1,8 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import Button from './Button';
 import { useToast } from './ToastProvider';
-import Button from './Button';
 import { copy } from '../app/copy/en';
 
 // Wallet connection states
@@ -48,7 +47,7 @@ export default function WalletStatus() {
     // Mock connection process - replace with actual wallet integration
     setTimeout(() => {
       // Simulate different scenarios for testing
-      const scenarios = ['success', 'error', 'wrong_network'];
+      const scenarios = ['success', 'error', 'wrong_network', 'no_wallet'];
       const scenario = scenarios[Math.floor(Math.random() * scenarios.length)];
 
       switch (scenario) {
@@ -140,8 +139,6 @@ export default function WalletStatus() {
 
   const config = getStateConfig(walletState);
 
-
-
   const handleClick = () => {
     switch (walletState) {
       case WALLET_STATES.DISCONNECTED:
@@ -201,64 +198,45 @@ export default function WalletStatus() {
             fill="none"
             viewBox="0 0 24 24"
             aria-hidden="true"
-          />
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            />
+          </svg>
+        )}
+        {config.buttonText}
+      </Button>
 
-          {/* Wallet address or helper text */}
-          {config.showAddress && walletData ? (
-            <div className="flex flex-col">
-              <span className="text-sm font-mono text-slate-300">{walletData.address}</span>
-              <span className="text-xs text-slate-500">{walletData.balance}</span>
-            </div>
-          ) : (
-            <span className="text-sm text-slate-400 max-w-xs">{config.helperText}</span>
-          )}
+      {/* Wallet address or helper text */}
+      {config.showAddress && walletData ? (
+        <div className="flex flex-col">
+          <span className="text-sm font-mono text-slate-300">{walletData.address}</span>
+          <span className="text-xs text-slate-500">{walletData.balance}</span>
         </div>
+      ) : (
+        <span className="text-sm text-slate-400 max-w-xs">{config.helperText}</span>
+      )}
 
-        <Button
-          variant={config.variant}
-          loading={config.loading}
-          disabled={config.disabled}
-          onClick={handleClick}
-          aria-label={config.buttonText}
-          aria-describedby="wallet-helper-text"
-        >
-          {walletState === WALLET_STATES.CONNECTING && (
-            <svg
-              className="animate-spin -ml-1 mr-2 h-4 w-4 inline"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              />
-            </svg>
-          )}
-          {config.buttonText}
-        </Button>
+      <div className="sr-only" role="status" aria-live="polite">
+        Wallet status:
+        {' '}
+        {walletState}
+        {walletData?.address && `. Connected as ${walletData.address}`}
+        {error && `. Error: ${error}`}
+      </div>
 
-        <div className="sr-only" role="status" aria-live="polite">
-          Wallet status:
-          {' '}
-          {walletState}
-          {walletData?.address && `. Connected as ${walletData.address}`}
-          {error && `. Error: ${error}`}
-        </div>
-
-        <div id="wallet-helper-text" className="sr-only">
-          {config.helperText}
-        </div>
+      <div id="wallet-helper-text" className="sr-only">
+        {config.helperText}
       </div>
     </div>
   );

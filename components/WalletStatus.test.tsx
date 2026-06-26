@@ -13,6 +13,7 @@ jest.mock('./WalletContext', () => ({
 
 import { useWallet } from './WalletContext';
 import WalletStatus, { WALLET_STATES } from './WalletStatus';
+import { ToastProvider } from './ToastProvider';
 
 expect.extend(toHaveNoViolations);
 
@@ -30,15 +31,19 @@ describe('WalletStatus (direct import)', () => {
     jest.clearAllMocks();
   });
 
+  function renderWithProviders(ui) {
+    return render(<ToastProvider>{ui}</ToastProvider>);
+  }
+
   it('renders placeholder on first paint to avoid hydration mismatch', () => {
     mockWalletState(WALLET_STATES.IDLE);
-    render(<WalletStatus />);
+    renderWithProviders(<WalletStatus />);
     expect(screen.getByTestId('wallet-status-placeholder')).toBeInTheDocument();
   });
 
   it('switches from placeholder to real UI after mount', async () => {
     mockWalletState(WALLET_STATES.IDLE);
-    render(<WalletStatus />);
+    renderWithProviders(<WalletStatus />);
 
     await waitFor(() => {
       expect(screen.queryByTestId('wallet-status-placeholder')).not.toBeInTheDocument();
@@ -49,7 +54,7 @@ describe('WalletStatus (direct import)', () => {
 
   it('shows "Connect Wallet" when idle', async () => {
     mockWalletState(WALLET_STATES.IDLE);
-    render(<WalletStatus />);
+    renderWithProviders(<WalletStatus />);
 
     await waitFor(() => {
       expect(screen.getByText('Connect Wallet')).toBeInTheDocument();
@@ -60,7 +65,7 @@ describe('WalletStatus (direct import)', () => {
     mockWalletState(WALLET_STATES.CONNECTED, {
       address: 'GABC123DEF456GHI789JKL012MNO345PQR678STU901VWX234YZ',
     });
-    render(<WalletStatus />);
+    renderWithProviders(<WalletStatus />);
 
     await waitFor(() => {
       expect(screen.getByText(/GABC\.\.\.YZ/)).toBeInTheDocument();
@@ -69,7 +74,7 @@ describe('WalletStatus (direct import)', () => {
 
   it('shows "Connecting…" when connecting', async () => {
     mockWalletState(WALLET_STATES.CONNECTING);
-    render(<WalletStatus />);
+    renderWithProviders(<WalletStatus />);
 
     await waitFor(() => {
       expect(screen.getByText('Connecting…')).toBeInTheDocument();
@@ -80,7 +85,7 @@ describe('WalletStatus (direct import)', () => {
   it('calls connect on click when idle', async () => {
     const user = userEvent.setup();
     mockWalletState(WALLET_STATES.IDLE);
-    render(<WalletStatus />);
+    renderWithProviders(<WalletStatus />);
 
     await waitFor(() => {
       expect(screen.getByText('Connect Wallet')).toBeInTheDocument();
@@ -95,7 +100,7 @@ describe('WalletStatus (direct import)', () => {
     mockWalletState(WALLET_STATES.CONNECTED, {
       address: 'GABC123DEF456GHI789JKL012MNO345PQR678STU901VWX234YZ',
     });
-    render(<WalletStatus />);
+    renderWithProviders(<WalletStatus />);
 
     await waitFor(() => {
       expect(screen.getByText(/GABC\.\.\.YZ/)).toBeInTheDocument();
@@ -107,7 +112,7 @@ describe('WalletStatus (direct import)', () => {
 
   it('announces status to screen readers', async () => {
     mockWalletState(WALLET_STATES.CONNECTED, { address: 'GABC...XYZ' });
-    render(<WalletStatus />);
+    renderWithProviders(<WalletStatus />);
 
     await waitFor(() => {
       const status = screen.getByTestId('wallet-aria-status');
@@ -117,7 +122,7 @@ describe('WalletStatus (direct import)', () => {
 
   it('has no accessibility violations', async () => {
     mockWalletState(WALLET_STATES.IDLE);
-    const { container } = render(<WalletStatus />);
+    const { container } = renderWithProviders(<WalletStatus />);
 
     await waitFor(() => {
       expect(screen.getByTestId('wallet-status-button')).toBeInTheDocument();
@@ -128,7 +133,7 @@ describe('WalletStatus (direct import)', () => {
   });
 
   it('exports stable WALLET_STATES', () => {
-    expect(WALLET_STATES.IDLE).toBe('idle');
+    expect(WALLET_STATES.DISCONNECTED).toBe('disconnected');
     expect(WALLET_STATES.CONNECTING).toBe('connecting');
     expect(WALLET_STATES.CONNECTED).toBe('connected');
     expect(WALLET_STATES.ERROR).toBe('error');

@@ -5,16 +5,15 @@ import '@testing-library/jest-dom';
 
 // ── Mock next/dynamic so we can control lazy-load timing in tests ──
 jest.mock('next/dynamic', () => {
-  return function dynamicMock(importFunc: () => Promise<any>, options: any) {
-    const LazyComponent = React.lazy(importFunc);
-
-    function DynamicWrapper(props: any) {
-      const [Component, setComponent] = React.useState<any>(null);
+  const React = require('react');
+  return function dynamicMock(importFunc, options) {
+    function DynamicWrapper(props) {
+      const [Component, setComponent] = React.useState(null);
       const [isLoading, setIsLoading] = React.useState(true);
 
       React.useEffect(() => {
         let cancelled = false;
-        importFunc().then((mod: any) => {
+        importFunc().then((mod) => {
           if (!cancelled) {
             setComponent(() => mod.default || mod);
             setIsLoading(false);
@@ -25,14 +24,14 @@ jest.mock('next/dynamic', () => {
 
       if (isLoading && options?.loading) {
         const LoadingComponent = options.loading;
-        return <LoadingComponent {...props} />;
+        return React.createElement(LoadingComponent, props);
       }
 
       if (Component) {
-        return (
-          <React.Suspense fallback={options?.loading ? <options.loading {...props} /> : null}>
-            <Component {...props} />
-          </React.Suspense>
+        return React.createElement(
+          React.Suspense,
+          { fallback: options?.loading ? React.createElement(options.loading, props) : null },
+          React.createElement(Component, props),
         );
       }
 

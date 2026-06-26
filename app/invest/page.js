@@ -1,15 +1,12 @@
 "use client";
-import Button from '@/components/Button';
-
-import Button from '@/components/Button'
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ErrorBanner from "@/components/ErrorBanner";
+import InvoiceFilters, { DEFAULT_FILTERS, hasActiveFilters } from "@/components/InvoiceFilters";
 import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
+import InvoiceSearch from "@/components/InvoiceSearch";
 import Pagination from "@/components/Pagination";
-import Button from '@/components/Button'
 import { copy } from "../copy/en";
-import Button from '@/components/Button'
 import { fetchInvestableInvoices } from "../../lib/api/invoices";
 
 /**
@@ -17,6 +14,7 @@ import { fetchInvestableInvoices } from "../../lib/api/invoices";
  * the same constant without hard-coding a magic number.
  */
 export const PAGE_SIZE = 10;
+export const SEARCH_DEBOUNCE_MS = 200;
 
 /**
  * Mock invoice data â€” replace with real API call once the backend endpoint
@@ -163,11 +161,15 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
     };
   }, [loadInvoices]);
 
+  const handleSearchChange = useCallback((value) => {
+    setSearchQuery(value);
+  }, []);
+
   // ——————————————————————————————————————————————————————————————————————————
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
-    }, 200);
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -179,9 +181,8 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
    */
   const handleLoadMore = useCallback(() => {
     setVisibleCount((prev) => {
-      const next = Math.min(prev + PAGE_SIZE, invoices?.length ?? prev);
-      const total = invoices?.length ?? 0;
-      setStatusMessage(getPaginationAnnouncement(next, total));
+      const next = Math.min(prev + PAGE_SIZE, filteredInvoices.length);
+      setPaginationAnnouncement(getPaginationAnnouncement(next, filteredInvoices.length));
       return next;
     });
 
@@ -191,10 +192,92 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
     }, 0);
   }, [invoices]);
 
-  // â”€â”€ Derived values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const visibleInvoices = Array.isArray(invoices)
-    ? invoices.slice(0, visibleCount)
-    : [];
+  // â”€â”€ Filtered invoices â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const filteredInvoices = useMemo(() => {
+    if (!Array.isArray(invoices) || invoices.length === 0) return [];
+
+    let result = [...invoices];
+
+    // Apply search filter
+    if (debouncedQuery) {
+      const q = debouncedQuery.toLowerCase();
+      result = result.filter((inv) => inv.issuer?.toLowerCase().includes(q));
+    }
+
+    // Apply currency filter
+    if (filters.currency) {
+      result = result.filter((inv) => inv.currency === filters.currency);
+    }
+
+    // Apply yield range filters
+    if (filters.yieldMin) {
+      const min = parseFloat(filters.yieldMin);
+      result = result.filter((inv) => {
+        const y = parseFloat(inv.yield);
+        return !isNaN(y) && y >= min;
+      });
+    }
+    if (filters.yieldMax) {
+      const max = parseFloat(filters.yieldMax);
+      result = result.filter((inv) => {
+        const y = parseFloat(inv.yield);
+        return !isNaN(y) && y <= max;
+      });
+    }
+
+    // Apply maturity date range filters
+    if (filters.maturityFrom) {
+      result = result.filter((inv) => inv.dueDate >= filters.maturityFrom);
+    }
+    if (filters.maturityTo) {
+      result = result.filter((inv) => inv.dueDate <= filters.maturityTo);
+    }
+
+    // Apply sorting
+    if (filters.sort === "yield_desc") {
+      result.sort((a, b) => parseFloat(b.yield) - parseFloat(a.yield));
+    } else if (filters.sort === "yield_asc") {
+      result.sort((a, b) => parseFloat(a.yield) - parseFloat(b.yield));
+    } else if (filters.sort === "amount_desc") {
+      result.sort(
+        (a, b) =>
+          parseFloat(b.amount.replace(/,/g, "")) -
+          parseFloat(a.amount.replace(/,/g, "")),
+      );
+    } else if (filters.sort === "amount_asc") {
+      result.sort(
+        (a, b) =>
+          parseFloat(a.amount.replace(/,/g, "")) -
+          parseFloat(b.amount.replace(/,/g, "")),
+      );
+    } else if (filters.sort === "maturity_asc") {
+      result.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    } else if (filters.sort === "maturity_desc") {
+      result.sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+    }
+
+    return result;
+  }, [invoices, debouncedQuery, filters]);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filteredInvoices]);
+
+  const visibleInvoices = filteredInvoices.slice(0, visibleCount);
+
+  const statusMessage = useMemo(() => {
+    if (loadError) return copy.invest.errorStatus;
+    if (!Array.isArray(invoices)) return "";
+    if (invoices.length === 0) return "No invoices available";
+    if (hasActiveFilters(filters)) {
+      const count = filteredInvoices.length;
+      if (count === 0) return "No invoices match";
+      return `${count} of ${invoices.length} invoices match`;
+    }
+    if (paginationAnnouncement) return paginationAnnouncement;
+    return `${invoices.length} investable invoices loaded`;
+  }, [invoices, filteredInvoices, filters, paginationAnnouncement, loadError]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -239,7 +322,7 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
           />
         ) : invoices === null ? (
           <InvoiceListSkeleton rows={3} />
-        ) : allInvoices.length === 0 ? (
+        ) : invoices.length === 0 ? (
           <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-8 text-center text-slate-300">{copy.invest.emptyState}</div>
         ) : filteredInvoices.length === 0 ? (
           <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-8 text-center text-slate-300">No invoices match your filters.</div>
