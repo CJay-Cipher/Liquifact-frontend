@@ -214,16 +214,38 @@ export function InvestMarketplace({ loadInvoices = fetchInvestableInvoices }) {
         </p>
       </div>
 
-        <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6">
-          <div className="flex flex-wrap gap-4 items-center">
-            <InvoiceSearch value={searchQuery} onChange={handleSearchChange} />
+        {/* 
+          ACCESSIBILITY DESIGN (Issue #91):
+          - We wrap the filter group in a <fieldset> with `aria-disabled="true"` to announce the preview/disabled 
+            state to screen readers while keeping all controls discoverable in the tab order (unlike native `disabled`).
+          - `aria-describedby` programmatically links the fieldset to the visible "Soon" badge, ensuring that 
+            assistive technologies announce the "coming soon" status when users navigate to the filters.
+          - We use a no-op handler structure (passing empty handlers) and CSS `pointer-events-none` to prevent
+            interaction while keeping the controls focusable.
+          - `opacity-60` is applied only to the inner controls container to ensure the "Soon" label itself stays
+            fully opaque for maximum contrast (WCAG AA compliant).
+        */}
+        <fieldset 
+          className="mb-8 rounded-xl border border-slate-800 bg-slate-900/30 p-6"
+          aria-disabled="true"
+          aria-describedby="filters-coming-soon"
+        >
+          <legend className="sr-only">Marketplace Filters</legend>
+          <div id="filters-coming-soon" className="mb-4 inline-block rounded bg-slate-800 px-2 py-1 text-xs font-semibold tracking-wide text-slate-300">
+            Soon: These filter controls are currently unavailable.
+          </div>
+          <div className="flex flex-wrap gap-4 items-center opacity-60 pointer-events-none">
+            <InvoiceSearch 
+              value={searchQuery} 
+              onChange={/* no-op handler to keep it read-only but focusable */ () => {}} 
+            />
             <InvoiceFilters
               filters={filters}
-              onFilterChange={handleFilterChange}
-              onClearFilters={() => setFilters(DEFAULT_FILTERS)}
+              onFilterChange={/* no-op handler to keep it read-only but focusable */ () => {}}
+              onClearFilters={/* no-op handler to keep it read-only but focusable */ () => {}}
             />
           </div>
-        </div>
+        </fieldset>
 
         {invoices === null ? (
           <InvoiceListSkeleton rows={3} />

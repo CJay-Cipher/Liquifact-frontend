@@ -88,6 +88,7 @@ Pure function that returns a sorted copy of invoice list. Does **not** mutate th
 
 ## Accessibility Features
 
+- **Coming Soon Semantics**: Filter controls are wrapped in a `fieldset` with `aria-disabled="true"` and `aria-describedby` indicating the "Soon" status, making the unavailable state perceivable by screen readers while keeping controls discoverable.
 - Direction toggle buttons carry `aria-sort` (`ascending` | `descending` | `none`)
 - Inactive toggles are `disabled` and carry `aria-sort="none"`
 - All controls have `aria-label` attributes
