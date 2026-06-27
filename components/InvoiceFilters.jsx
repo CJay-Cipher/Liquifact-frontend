@@ -12,6 +12,43 @@ export const DEFAULT_FILTERS = {
   sortDir: 'desc',
 };
 
+/**
+ * Sort-column values that support direction toggling.
+ * These are the base column keys (without _asc/_desc suffix).
+ */
+export const SORTABLE_COLUMNS = ['amount', 'yield'];
+
+export const SORT_OPTIONS = [
+  { value: '', label: 'Sort By' },
+  { value: 'amount', label: 'Amount' },
+  { value: 'yield', label: 'Yield' },
+  { value: 'maturity', label: 'Maturity' },
+];
+
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF'];
+
+/**
+ * Given the current filters, return the active sort column and direction.
+ * Supports both plain column values ('yield') and legacy compound values ('yield_desc').
+ *
+ * @param {object} filters
+ * @returns {{ column: string, dir: 'asc'|'desc' }}
+ */
+export function parseSortState(filters) {
+  const { sort, sortDir } = filters;
+  const match = sort.match(/^(amount|yield|maturity)_(asc|desc)$/);
+  if (match) {
+    return { column: match[1], dir: match[2] };
+  }
+  return { column: sort, dir: sortDir || 'desc' };
+}
+
+/**
+ * Returns true when any structured filter field is set (excludes search query).
+ *
+ * @param {typeof DEFAULT_FILTERS} filters
+ * @returns {boolean}
+ */
 export function hasActiveFilters(filters) {
   return (
     filters.yieldMin !== "" ||
@@ -24,43 +61,147 @@ export function hasActiveFilters(filters) {
 }
 
 /**
- * Sort-column values that support direction toggling.
- * These are the base column keys (without a _asc/_desc suffix).
- */
-export const SORTABLE_COLUMNS = ['amount', 'yield'];
-
-/**
- * Given the current filters, return the active sort column and direction.
+ * Returns true when search or structured filters are active.
  *
- * @param {object} filters
- * @returns {{ column: string, dir: 'asc'|'desc' }}
+ * @param {typeof DEFAULT_FILTERS} filters
+ * @param {string} [searchQuery='']
+ * @returns {boolean}
  */
-export function parseSortState(filters) {
-  const { sort, sortDir } = filters;
-  // Extract base column from legacy compound values like 'yield_desc'
-  const match = sort.match(/^(amount|yield|maturity)_(asc|desc)$/);
-  if (match) {
-    return { column: match[1], dir: match[2] };
-  }
-  return { column: sort, dir: sortDir || 'desc' };
+export function hasAnyActiveFilters(filters, searchQuery = '') {
+  return hasActiveFilters(filters) || Boolean(searchQuery.trim());
 }
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF'];
+/**
+ * Builds the visible results summary line.
+ *
+ * @param {number} shown - Invoices currently visible (after pagination).
+ * @param {number} total - Total invoices matching the current filters.
+ * @returns {string}
+ */
+export function getResultsSummaryText(shown, total) {
+  return `Showing ${shown} of ${total} invoices`;
+}
 
-const SORT_OPTIONS = [
-  { value: '', label: 'Sort By' },
-  { value: 'amount', label: 'Amount' },
-  { value: 'yield', label: 'Yield' },
-  { value: 'maturity', label: 'Maturity' },
-];
+/**
+ * @typedef {Object} ActiveFilterChip
+ * @property {string} key - Stable React key.
+ * @property {string} label - Visible chip label.
+ * @property {string} clearKey - Key passed to onRemoveFilter ('search' or a filter field).
+ */
 
-/** Render a small ↑↓ toggle button for asc/desc. */
+/**
+ * Returns removable chips for each active filter and the search query.
+ *
+ * @param {typeof DEFAULT_FILTERS} filters
+ * @param {string} [searchQuery='']
+ * @returns {ActiveFilterChip[]}
+ */
+export function getActiveFilterChips(filters, searchQuery = '') {
+  /** @type {ActiveFilterChip[]} */
+  const chips = [];
+
+  const trimmedSearch = searchQuery.trim();
+  if (trimmedSearch) {
+    chips.push({ key: 'search', label: `Search: ${trimmedSearch}`, clearKey: 'search' });
+  }
+
+  if (filters.yieldMin !== '') {
+    chips.push({ key: 'yieldMin', label: `Min yield: ${filters.yieldMin}%`, clearKey: 'yieldMin' });
+  }
+
+  if (filters.yieldMax !== '') {
+    chips.push({ key: 'yieldMax', label: `Max yield: ${filters.yieldMax}%`, clearKey: 'yieldMax' });
+  }
+
+  if (filters.currency !== '') {
+    chips.push({ key: 'currency', label: `Currency: ${filters.currency}`, clearKey: 'currency' });
+  }
+
+  if (filters.maturityFrom !== '') {
+    chips.push({ key: 'maturityFrom', label: `From: ${filters.maturityFrom}`, clearKey: 'maturityFrom' });
+  }
+
+  if (filters.maturityTo !== '') {
+    chips.push({ key: 'maturityTo', label: `To: ${filters.maturityTo}`, clearKey: 'maturityTo' });
+  }
+
+  if (filters.sort !== '') {
+    const sortLabel =
+      SORT_OPTIONS.find((opt) => opt.value === filters.sort)?.label ?? filters.sort;
+    chips.push({ key: 'sort', label: `Sort: ${sortLabel}`, clearKey: 'sort' });
+  }
+
+  return chips;
+}
+
+/**
+ * Returns a copy of filters with a single field cleared.
+ *
+ * @param {typeof DEFAULT_FILTERS} filters
+ * @param {string} clearKey
+ * @returns {typeof DEFAULT_FILTERS}
+ */
+export function clearFilterByKey(filters, clearKey) {
+  if (clearKey === 'search') return filters;
+  return { ...filters, [clearKey]: '' };
+}
+
+/**
+ * Visible results count and removable active-filter chips for the marketplace.
+ */
+export function ActiveFilterSummary({
+  shown,
+  totalFiltered,
+  filters,
+  searchQuery,
+  onRemoveFilter,
+  onClearAll,
+}) {
+  const chips = getActiveFilterChips(filters, searchQuery);
+  const hasChips = chips.length > 0;
+
+  return (
+    <div className="mb-4 space-y-3">
+      <p className="text-sm text-slate-400">{getResultsSummaryText(shown, totalFiltered)}</p>
+
+      {hasChips ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <ul className="flex flex-wrap gap-2 list-none p-0 m-0" aria-label="Active filters">
+            {chips.map((chip) => (
+              <li key={chip.key}>
+                <button
+                  type="button"
+                  onClick={() => onRemoveFilter(chip.clearKey)}
+                  className="inline-flex items-center gap-1 rounded-full border border-cyan-700/60 bg-cyan-900/20 px-3 py-1 text-xs text-cyan-300 transition-colors hover:bg-cyan-900/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  aria-label={`Remove ${chip.label}`}
+                >
+                  <span>{chip.label}</span>
+                  <span aria-hidden="true">&times;</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1 text-xs text-cyan-400 transition-colors hover:bg-slate-700/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+          >
+            Clear all
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** ↑↓ direction toggle button for a sortable column. */
 function DirectionToggle({ column, filters, onFilterChange }) {
   const { column: activeColumn, dir } = parseSortState(filters);
   const isActive = activeColumn === column;
 
   const handleToggle = useCallback(() => {
-    if (!isActive) return; // only relevant when this column is selected
+    if (!isActive) return;
     onFilterChange({
       ...filters,
       sort: column,
@@ -103,7 +244,7 @@ export default function InvoiceFilters({ filters, onFilterChange, onClearFilters
     (column) => {
       onFilterChange({ ...filters, sort: column, sortDir: filters.sortDir || 'desc' });
     },
-    [filters, onFilterChange],
+    [filters, onFilterChange]
   );
 
   const active = hasActiveFilters(filters);
@@ -175,7 +316,6 @@ export default function InvoiceFilters({ filters, onFilterChange, onClearFilters
         />
       </fieldset>
 
-      {/* Sort column selector + per-column direction toggles */}
       <fieldset className="flex items-center gap-2 border-none p-0 m-0">
         <legend className="sr-only">Sort Options</legend>
         <select
