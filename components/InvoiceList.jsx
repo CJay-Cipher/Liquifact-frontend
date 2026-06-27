@@ -165,7 +165,7 @@ function mergeInvoices(optimisticInvoices, loadedInvoices) {
  */
 export default function InvoiceList({ loadInvoices = loadMockInvoices, optimisticInvoices = [] }) {
   const [invoices, setInvoices] = useState(null);
-  const [loadError, setLoadError] = useState("");
+  const [loadError, setLoadError] = useState('');
 
   const mergedInvoices = useMemo(
     () => mergeInvoices(optimisticInvoices, invoices ?? []),
@@ -202,12 +202,11 @@ export default function InvoiceList({ loadInvoices = loadMockInvoices, optimisti
     };
   }, [loadInvoices]);
 
-  // Compute status message inline in render
-
-
-
-
-
+  const statusMessage = loadError
+    ? 'Invoice list failed to load.'
+    : invoices === null
+      ? 'Loading invoices.'
+      : getInvoiceAnnouncement(mergedInvoices);
 
   if (loadError) {
     return (

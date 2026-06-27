@@ -1,4 +1,5 @@
 "use client";
+
 import { useState } from "react";
 import { copy } from "../copy/en";
 import NavMenu from "../../components/NavMenu";
