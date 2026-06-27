@@ -10,6 +10,38 @@
 
 import { forwardRef } from "react";
 
+export function normalizePaginationParams({
+  page,
+  pageSize,
+  totalItems = 0,
+  defaultPageSize = 10,
+} = {}) {
+  const safeTotalItems = Number.isFinite(totalItems) ? Math.max(0, Math.trunc(totalItems)) : 0;
+  const safeDefaultPageSize = Number.isInteger(defaultPageSize) && defaultPageSize > 0
+    ? defaultPageSize
+    : 10;
+  const maxPageSize = Math.max(1, safeTotalItems > 0 ? safeTotalItems : safeDefaultPageSize);
+
+  const parsedPage = Number.parseInt(String(page), 10);
+  const parsedPageSize = Number.parseInt(String(pageSize), 10);
+
+  const hasValidPage = Number.isInteger(parsedPage) && parsedPage > 0;
+  const hasValidPageSize = Number.isInteger(parsedPageSize) && parsedPageSize > 0;
+
+  const normalizedPageSize = hasValidPageSize
+    ? Math.max(1, Math.min(parsedPageSize, maxPageSize))
+    : safeDefaultPageSize;
+
+  const totalPages = Math.max(1, Math.ceil(safeTotalItems / normalizedPageSize));
+  const normalizedPage = hasValidPage ? Math.min(parsedPage, totalPages) : 1;
+
+  return {
+    page: Math.max(1, normalizedPage),
+    pageSize: Math.max(1, normalizedPageSize),
+    totalPages,
+  };
+}
+
 /**
  * Pagination — accessible "Load more" control.
  *

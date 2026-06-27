@@ -59,6 +59,16 @@ Pure function that returns a sorted copy of invoice list. Does **not** mutate th
 - **Future API Contract**: Reset to base `GET /api/invoices`
 - **UI State**: Active (disabled when no filters are active)
 
+### 6. Marketplace Pagination Query Params
+- **Purpose**: Sanitize `page` and `pageSize` values supplied through the marketplace URL so pagination stays within safe bounds.
+- **Query params**: `page`, `pageSize`
+- **Validation rules**:
+  - Coerce both params to integers.
+  - Clamp `page` to the range `[1, totalPages]`.
+  - Clamp `pageSize` to the range `[1, totalItems]`.
+  - Fall back to defaults when values are missing or malformed.
+- **UI behavior**: The marketplace uses the sanitized values to cap the number of visible invoices and never renders more items than the filtered dataset contains.
+
 ## Accessibility Features
 - Direction toggle buttons carry `aria-sort` (`ascending` | `descending` | `none`)
 - Inactive toggles are `disabled` and carry `aria-sort="none"`
