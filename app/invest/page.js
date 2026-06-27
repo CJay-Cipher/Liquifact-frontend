@@ -1,28 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import ErrorBanner from '../../components/ErrorBanner';
-import InvoiceListSkeleton from '../../components/InvoiceListSkeleton';
-import { copy } from '../copy/en';
-import { fetchInvestableInvoices } from '../lib/api/invoices';
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import Button from "@/components/Button";
+import ErrorBanner from "@/components/ErrorBanner";
+import InvoiceCard from "@/components/InvoiceCard";
+import InvoiceListSkeleton from "@/components/InvoiceListSkeleton";
+import InvoiceSearch from "@/components/InvoiceSearch";
+import Pagination from "@/components/Pagination";
+import InvoiceFilters, { DEFAULT_FILTERS, parseSortState } from "@/components/InvoiceFilters";
+import { copy } from "../copy/en";
+import { fetchInvestableInvoices } from "../../lib/api/invoices";
+import InvoiceSearch from "@/components/InvoiceSearch";
+import InvoiceFilters, { DEFAULT_FILTERS, hasActiveFilters } from "@/components/InvoiceFilters";
 
-const INVOICE_STATUSES = {
-  PENDING_TOKENIZATION: 'Pending tokenization',
-  TOKENIZED: 'Tokenized',
-  FUNDED: 'Funded',
-  SETTLED: 'Settled',
-};
-
-const STATUS_STYLES = {
-  [INVOICE_STATUSES.PENDING_TOKENIZATION]:
-    'bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/20',
-  [INVOICE_STATUSES.TOKENIZED]:
-    'bg-cyan-500/10 text-cyan-200 ring-1 ring-cyan-400/20',
-  [INVOICE_STATUSES.FUNDED]:
-    'bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-400/20',
-  [INVOICE_STATUSES.SETTLED]:
-    'bg-slate-800/80 text-slate-200 ring-1 ring-slate-500/20',
-};
+export const PAGE_SIZE = 10;
+export const SEARCH_DEBOUNCE_MS = 200;
 
 const MOCK_INVOICES = [
   {

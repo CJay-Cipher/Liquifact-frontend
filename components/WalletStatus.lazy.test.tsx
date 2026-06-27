@@ -17,7 +17,7 @@ jest.mock('next/dynamic', () => {
 
       inlineReact.useEffect(() => {
         let cancelled = false;
-        importFunc().then((mod: any) => {
+        importFunc().then((mod) => {
           if (!cancelled) {
             setComponent(() => mod.default || mod);
             setIsLoading(false);
@@ -30,7 +30,7 @@ jest.mock('next/dynamic', () => {
 
       if (isLoading && options?.loading) {
         const LoadingComponent = options.loading;
-        return <LoadingComponent {...props} />;
+        return React.createElement(LoadingComponent, props);
       }
 
       if (Component) {

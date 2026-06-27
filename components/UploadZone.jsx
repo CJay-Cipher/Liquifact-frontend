@@ -9,6 +9,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 const FILE_CONSTRAINTS = {
   accept: ".pdf",
   mimeType: "application/pdf",
