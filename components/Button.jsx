@@ -30,11 +30,6 @@ import Spinner from "./Spinner";
  * @param {React.Ref<HTMLButtonElement>} ref — Forwarded ref.
  */
 
-const P = () => (
-return "hi"
-)
-
-
 const Button = forwardRef(function Button(
   { variant = "primary", loading = false, disabled = false, children, className = "", ...rest },
   ref

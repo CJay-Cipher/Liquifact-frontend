@@ -93,7 +93,7 @@ export function InvoiceDetail({ loadInvoice = loadInvoiceById }) {
           href="/"
           className="inline-block py-3 text-xl font-semibold tracking-tight text-cyan-400 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
         >
-          &larr; LiquiFact
+          ← LiquiFact
         </Link>
         <WalletStatus />
       </header>
@@ -104,7 +104,7 @@ export function InvoiceDetail({ loadInvoice = loadInvoiceById }) {
           className="inline-block mb-6 text-sm text-slate-400 hover:text-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 rounded"
           aria-label="Back to marketplace"
         >
-          &larr; Back to marketplace
+          ← Back to marketplace
         </Link>
 
         <h1 className="text-2xl font-bold mb-2">Invoice details</h1>
@@ -129,6 +129,10 @@ export function InvoiceDetail({ loadInvoice = loadInvoiceById }) {
                 {invoice.issuer}
               </h2>
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <dt className="text-slate-500">Issuer</dt>
+                  <dd className="text-slate-100">{invoice.issuer}</dd>
+                </div>
                 <div>
                   <dt className="text-slate-500">Amount</dt>
                   <dd className="text-slate-100">

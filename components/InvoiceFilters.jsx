@@ -142,7 +142,14 @@ export function getActiveFilterChips(filters, searchQuery = '') {
  * @returns {typeof DEFAULT_FILTERS}
  */
 export function clearFilterByKey(filters, clearKey) {
-  if (clearKey === 'search') return filters;
+  if (clearKey === 'search') {
+    return filters;
+  }
+
+  if (clearKey === 'sort') {
+    return { ...filters, sort: '', sortDir: 'desc' };
+  }
+
   return { ...filters, [clearKey]: '' };
 }
 
@@ -193,6 +200,28 @@ export function ActiveFilterSummary({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Sort-column values that support direction toggling.
+ * These are the base column keys (without a _asc/_desc suffix).
+ */
+export const SORTABLE_COLUMNS = ['amount', 'yield'];
+
+/**
+ * Given the current filters, return the active sort column and direction.
+ *
+ * @param {object} filters
+ * @returns {{ column: string, dir: 'asc'|'desc' }}
+ */
+export function parseSortState(filters) {
+  const { sort, sortDir } = filters;
+  // Extract base column from legacy compound values like 'yield_desc'
+  const match = sort.match(/^(amount|yield|maturity)_(asc|desc)$/);
+  if (match) {
+    return { column: match[1], dir: match[2] };
+  }
+  return { column: sort, dir: sortDir || 'desc' };
 }
 
 /** ↑↓ direction toggle button for a sortable column. */

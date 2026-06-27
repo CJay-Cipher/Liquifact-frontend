@@ -60,9 +60,9 @@ export default function InvoiceListSkeleton({ rows = 3, ...props }) {
             </div>
 
           </div>
-        </div>
+        </li>
       ))}
       <span className="sr-only">Loading invoices, please wait…</span>
-    </div>
+    </ul>
   );
 }
