@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import Button from './Button';
-import { useToast } from './ToastProvider';
+import { useToast, ToastContext } from './ToastProvider';
 import { copy } from '../app/copy/en';
+import { isFreighterConnected, connectFreighter, getFreighterNetwork } from '../lib/wallet/freighter';
 
 // Wallet connection states defined locally to prevent mock pollution / circular dependencies
 const WALLET_STATES = {
@@ -38,6 +39,7 @@ export default function WalletStatus() {
   // 2. Safe useWallet context lookup (no-throw fallback)
   let wallet = null;
   try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     wallet = useWallet();
   } catch (e) {
     // If not within a provider, we fall back to self-contained local state
@@ -49,41 +51,41 @@ export default function WalletStatus() {
   const [localError, setLocalError] = useState(null);
 
   // Connection flow for self-contained local state
-  const connectLocal = () => {
+  const connectLocal = async () => {
     setLocalState(WALLET_STATES.CONNECTING);
     setLocalError(null);
 
-    setTimeout(() => {
-      // Simulate different scenarios for testing
-      const scenarios = ["success", "error", "wrong_network", "no_wallet"];
-      const scenario = scenarios[Math.floor(Math.random() * scenarios.length)];
-      const mockWalletData = {
-        address: 'GABC...XYZ123',
-        network: 'public',
-        balance: '1,234.56 XLM',
-      };
-
-      switch (scenario) {
-        case "success":
-          setWalletState(WALLET_STATES.CONNECTED);
-          setWalletData(mockWalletData);
-          toast.success(copy.wallet.toastConnectedMsg, copy.wallet.toastConnectedTitle);
-          break;
-        case "error":
-          setWalletState(WALLET_STATES.ERROR);
-          setError(copy.wallet.errorConnect);
-          toast.error(copy.wallet.toastErrorMsg, copy.wallet.toastErrorTitle);
-          break;
-        case "wrong_network":
-          setWalletState(WALLET_STATES.WRONG_NETWORK);
-          setError(copy.wallet.errorWrongNetwork);
-          toast.error(copy.wallet.toastWrongNetworkMsg, copy.wallet.toastWrongNetworkTitle);
-          break;
-        case "no_wallet":
-          setWalletState(WALLET_STATES.NO_WALLET);
-          break;
+    try {
+      const isInstalled = await isFreighterConnected();
+      if (!isInstalled) {
+        setLocalState(WALLET_STATES.NO_WALLET);
+        return;
       }
-    }, 1500);
+
+      const address = await connectFreighter();
+      const network = await getFreighterNetwork();
+      const expectedNetwork = process.env.NEXT_PUBLIC_STELLAR_NETWORK || 'testnet';
+
+      if (network !== expectedNetwork.toLowerCase()) {
+        setLocalState(WALLET_STATES.WRONG_NETWORK);
+        setLocalError(`Connected to ${network}. Please switch to ${expectedNetwork}.`);
+        toast.error(copy.wallet.toastWrongNetworkMsg, copy.wallet.toastWrongNetworkTitle);
+        return;
+      }
+
+      setLocalState(WALLET_STATES.CONNECTED);
+      setLocalData({
+        address,
+        network,
+        balance: '1,234.56 XLM',
+        walletType: 'freighter',
+      });
+      toast.success(copy.wallet.toastConnectedMsg, copy.wallet.toastConnectedTitle);
+    } catch (err) {
+      setLocalState(WALLET_STATES.ERROR);
+      setLocalError(err.message || copy.wallet.errorConnect);
+      toast.error(copy.wallet.toastErrorMsg, copy.wallet.toastErrorTitle);
+    }
   };
 
   const disconnectLocal = () => {
@@ -234,33 +236,12 @@ export default function WalletStatus() {
     }
   };
 
-  const config = getStateConfig(walletState);
-
-  const handleClick = () => {
-    switch (walletState) {
-      case WALLET_STATES.DISCONNECTED:
-      case WALLET_STATES.ERROR:
-      case WALLET_STATES.WRONG_NETWORK:
-        connectWallet();
-        break;
-
-      case WALLET_STATES.CONNECTED:
-        disconnectWallet();
-        break;
-
-      case WALLET_STATES.NO_WALLET:
-        window.open("https://www.stellar.org/wallets", "_blank");
-        break;
-
-      default:
-        break;
-    }
-  };
+  const config = getStateConfig(rawState);
 
   return (
     <div className="flex flex-col gap-3">
       {/* Inline error banner for ERROR and WRONG_NETWORK states */}
-      {(walletState === WALLET_STATES.ERROR || walletState === WALLET_STATES.WRONG_NETWORK) &&
+      {(rawState === WALLET_STATES.ERROR || rawState === WALLET_STATES.WRONG_NETWORK) &&
         error && (
           <div
             role="alert"
@@ -285,8 +266,8 @@ export default function WalletStatus() {
       <div className="flex items-center gap-4">
 
         <Button
-          variant={config.variant}
-          loading={config.loading}
+          variant={config.buttonVariant === 'loading' ? 'primary' : config.buttonVariant}
+          loading={config.buttonVariant === 'loading'}
           disabled={config.disabled}
           onClick={handleClick}
           aria-label={config.buttonText}
@@ -301,7 +282,7 @@ export default function WalletStatus() {
         </Button>
 
         <div className="sr-only" role="status" aria-live="polite">
-          Wallet status: {walletState}
+          Wallet status: {rawState}
           {walletData?.address && `. Connected as ${walletData.address}`}
           {error && `. Error: ${error}`}
         </div>
@@ -309,6 +290,7 @@ export default function WalletStatus() {
         <div id="wallet-helper-text" className="sr-only">
           {config.helperText}
         </div>
+      </div>
     </div>
   );
 }

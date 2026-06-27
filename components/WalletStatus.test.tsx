@@ -1,127 +1,114 @@
-import React from "react";
-import { act, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import "@testing-library/jest-dom";
-import { ToastProvider } from "./ToastProvider";
-import WalletStatus, { WALLET_STATES } from "./WalletStatus";
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import WalletStatus from './WalletStatus';
+import { isFreighterConnected, connectFreighter, getFreighterNetwork } from '../lib/wallet/freighter';
+import { ToastProvider } from './ToastProvider';
 
-function setup() {
-  return userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-}
+jest.mock('../lib/wallet/freighter', () => ({
+  isFreighterConnected: jest.fn(),
+  connectFreighter: jest.fn(),
+  getFreighterNetwork: jest.fn(),
+}));
 
-function renderWithProviders(ui: React.ReactElement) {
-  return render(
-    <ToastProvider>
-      {ui}
-    </ToastProvider>
-  );
-}
+jest.mock('../app/copy/en', () => ({
+  copy: {
+    wallet: {
+      connectButton: 'Connect Wallet',
+      connectingButton: 'Connecting...',
+      disconnectButton: 'Disconnect Wallet',
+      retryButton: 'Retry Connection',
+      switchNetworkButton: 'Switch Network',
+      installWalletButton: 'Install Freighter',
+      helperDisconnected: 'Please connect your wallet.',
+      helperConnecting: 'Connecting to wallet...',
+      helperConnected: 'Connected to {network}.',
+      helperError: 'Connection failed.',
+      helperWrongNetwork: 'Wrong network detected.',
+      helperNoWallet: 'No wallet found.',
+      toastConnectedMsg: 'Connected successfully',
+      toastConnectedTitle: 'Success',
+      toastErrorMsg: 'Connection error',
+      toastErrorTitle: 'Error',
+      toastWrongNetworkMsg: 'Wrong network',
+      toastWrongNetworkTitle: 'Warning',
+      errorConnect: 'Failed to connect.',
+      errorWrongNetwork: 'Please switch network.'
+    }
+  }
+}));
 
-async function flushTimers(delayMs: number) {
-  await act(async () => {
-    jest.advanceTimersByTime(delayMs);
-    await Promise.resolve();
-  });
-}
-
-describe.skip('WalletStatus (direct import)', () => {
+describe('WalletStatus Integration', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
+    jest.clearAllMocks();
+    process.env.NEXT_PUBLIC_STELLAR_NETWORK = 'testnet';
   });
 
-  afterEach(async () => {
-    await act(async () => {
-      jest.runOnlyPendingTimers();
+  const renderWithToast = (ui: React.ReactElement) => {
+    return render(<ToastProvider>{ui}</ToastProvider>);
+  };
+
+  it('connects successfully', async () => {
+    (isFreighterConnected as jest.Mock).mockResolvedValue(true);
+    (connectFreighter as jest.Mock).mockResolvedValue('GABC...XYZ123');
+    (getFreighterNetwork as jest.Mock).mockResolvedValue('testnet');
+
+    renderWithToast(<WalletStatus />);
+    
+    // Initial state
+    const connectBtn = screen.getByRole('button', { name: /Connect Wallet/i });
+    fireEvent.click(connectBtn);
+
+    // Connecting state
+    expect(screen.getByRole('button', { name: /Connecting/i })).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Disconnect Wallet/i })).toBeInTheDocument();
+      // Should show truncated address
+      expect(screen.getByText(/GABC\.\.\.XYZ123/)).toBeInTheDocument();
     });
-    jest.useRealTimers();
-    jest.restoreAllMocks();
   });
 
-  it("renders the initial disconnected state", () => {
-    renderWithProviders(<WalletStatus />);
+  it('shows error on user rejection', async () => {
+    (isFreighterConnected as jest.Mock).mockResolvedValue(true);
+    (connectFreighter as jest.Mock).mockRejectedValue(new Error('User rejected connection'));
 
-    expect(screen.getByRole("button", { name: /connect wallet/i })).toBeInTheDocument();
-    expect(
-      screen.getByText(/connect your stellar wallet/i, { selector: "span" })
-    ).toBeInTheDocument();
+    renderWithToast(<WalletStatus />);
+    
+    fireEvent.click(screen.getByRole('button', { name: /Connect Wallet/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Retry Connection/i })).toBeInTheDocument();
+      const banner = screen.getByTestId('wallet-error-banner');
+      expect(banner).toHaveTextContent(/User rejected connection/);
+    });
   });
 
-  it("shows a connecting state and then a successful connection", async () => {
-    const user = setup();
-    jest.spyOn(Math, "random").mockReturnValue(0); // success scenario
+  it('shows wrong network when on public instead of testnet', async () => {
+    (isFreighterConnected as jest.Mock).mockResolvedValue(true);
+    (connectFreighter as jest.Mock).mockResolvedValue('GABC...XYZ123');
+    (getFreighterNetwork as jest.Mock).mockResolvedValue('public');
+    
+    renderWithToast(<WalletStatus />);
+    
+    fireEvent.click(screen.getByRole('button', { name: /Connect Wallet/i }));
 
-    renderWithProviders(<WalletStatus />);
-    const button = screen.getByRole("button", { name: /connect wallet/i });
-
-    await user.click(button);
-    expect(button).toHaveTextContent(/connecting/i);
-
-    await flushTimers(1500);
-
-    expect(screen.getByText(/1,234\.56 XLM/, { selector: "span" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /disconnect/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Switch Network/i })).toBeInTheDocument();
+      const banner = screen.getByTestId('wallet-error-banner');
+      expect(banner).toHaveTextContent(/Connected to public. Please switch to testnet./);
+    });
   });
 
-  it("disconnects the wallet when the disconnect button is clicked", async () => {
-    const user = setup();
-    jest.spyOn(Math, "random").mockReturnValue(0); // success scenario
+  it('shows install button when wallet not found', async () => {
+    (isFreighterConnected as jest.Mock).mockResolvedValue(false);
 
-    renderWithProviders(<WalletStatus />);
-    const connectButton = screen.getByRole("button", { name: /connect wallet/i });
-    await user.click(connectButton);
-    await flushTimers(1500);
+    renderWithToast(<WalletStatus />);
+    
+    fireEvent.click(screen.getByRole('button', { name: /Connect Wallet/i }));
 
-    const disconnectButton = screen.getByRole("button", { name: /disconnect/i });
-    await user.click(disconnectButton);
-
-    expect(screen.getByRole("button", { name: /connect wallet/i })).toBeInTheDocument();
-  });
-
-  it("shows an error state and allows retry", async () => {
-    const user = setup();
-    jest.spyOn(Math, "random").mockReturnValue(0.34); // error scenario (index 1)
-
-    renderWithProviders(<WalletStatus />);
-    const button = screen.getByRole("button", { name: /connect wallet/i });
-    await user.click(button);
-    await flushTimers(1500);
-
-    expect(screen.getByRole("button", { name: /retry connection/i })).toBeInTheDocument();
-  });
-
-  it("shows a wrong network state and allows retry", async () => {
-    const user = setup();
-    jest.spyOn(Math, "random").mockReturnValue(0.56); // wrong_network scenario (index 2)
-
-    renderWithProviders(<WalletStatus />);
-    const button = screen.getByRole("button", { name: /connect wallet/i });
-    await user.click(button);
-    await flushTimers(1500);
-
-    expect(screen.getByRole("button", { name: /switch network/i })).toBeInTheDocument();
-  });
-
-  it("shows a no-wallet state and opens the wallet installation page", async () => {
-    const user = setup();
-    const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
-    jest.spyOn(Math, "random").mockReturnValue(0.78); // no_wallet scenario (index 3)
-
-    renderWithProviders(<WalletStatus />);
-    const button = screen.getByRole("button", { name: /connect wallet/i });
-    await user.click(button);
-    await flushTimers(1500);
-
-    const installButton = screen.getByRole("button", { name: /install wallet/i });
-    await user.click(installButton);
-    expect(openSpy).toHaveBeenCalledWith("https://www.stellar.org/wallets", "_blank");
-
-    openSpy.mockRestore();
-  });
-
-  it("exports stable WALLET_STATES", () => {
-    expect(WALLET_STATES.DISCONNECTED).toBe("disconnected");
-    expect(WALLET_STATES.CONNECTING).toBe("connecting");
-    expect(WALLET_STATES.CONNECTED).toBe("connected");
-    expect(WALLET_STATES.ERROR).toBe("error");
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Install Freighter/i })).toBeInTheDocument();
+    });
   });
 });

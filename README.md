@@ -33,6 +33,7 @@ Part of the LiquiFact stack: **frontend** (this repo) | **backend** (Express API
    ```bash
    cp .env.local.example .env.local
    # Set NEXT_PUBLIC_API_URL if the API is not at http://localhost:3001
+   # Set NEXT_PUBLIC_STELLAR_NETWORK for Freighter integration (default: testnet)
    ```
 
 ---

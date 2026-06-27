@@ -12,6 +12,13 @@ import {
   useWallet,
   writeStoredSnapshot,
 } from "./WalletProvider";
+import { isFreighterConnected, connectFreighter, getFreighterNetwork } from "../lib/wallet/freighter";
+
+jest.mock("../lib/wallet/freighter", () => ({
+  isFreighterConnected: jest.fn(),
+  connectFreighter: jest.fn(),
+  getFreighterNetwork: jest.fn(),
+}));
 
 const STORAGE_KEY = "liquifact-wallet-snapshot";
 
@@ -40,6 +47,7 @@ function renderWithProvider(ui = <WalletProbe />) {
 beforeEach(() => {
   jest.useFakeTimers();
   localStorage.clear();
+  process.env.NEXT_PUBLIC_STELLAR_NETWORK = 'testnet';
 });
 
 afterEach(() => {
@@ -209,13 +217,14 @@ describe("WalletProvider", () => {
   });
 
   it("persists a connected snapshot after a successful connect", async () => {
-    jest.spyOn(Math, "random").mockReturnValue(0);
+    (isFreighterConnected as jest.Mock).mockResolvedValue(true);
+    (connectFreighter as jest.Mock).mockResolvedValue("GABCDEFGHIJKLMNOPQRSTUVWXYZ123456");
+    (getFreighterNetwork as jest.Mock).mockResolvedValue("testnet");
 
     renderWithProvider();
 
     await act(async () => {
       screen.getByRole("button", { name: "Connect" }).click();
-      jest.advanceTimersByTime(1500);
     });
 
     await waitFor(() => {
@@ -224,8 +233,8 @@ describe("WalletProvider", () => {
 
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
     expect(stored.state).toBe(WALLET_STATES.CONNECTED);
-    expect(stored.address).toBe("GABC...XYZ123");
-    expect(stored.network).toBe("public");
+    expect(stored.address).toBe("GABC...123456");
+    expect(stored.network).toBe("testnet");
     expect(stored.balance).toBeUndefined();
   });
 
@@ -266,13 +275,13 @@ describe("WalletProvider", () => {
   });
 
   it("clears storage when connect resolves to error", async () => {
-    jest.spyOn(Math, "random").mockReturnValue(0.26); // index 1 of 4 → error
+    (isFreighterConnected as jest.Mock).mockResolvedValue(true);
+    (connectFreighter as jest.Mock).mockRejectedValue(new Error("User rejected connection"));
 
     renderWithProvider();
 
     await act(async () => {
       screen.getByRole("button", { name: "Connect" }).click();
-      jest.advanceTimersByTime(1500);
     });
 
     await waitFor(() => {
@@ -282,13 +291,14 @@ describe("WalletProvider", () => {
   });
 
   it("clears storage when connect resolves to wrong network", async () => {
-    jest.spyOn(Math, "random").mockReturnValue(0.51); // index 2 of 4 → wrong_network
+    (isFreighterConnected as jest.Mock).mockResolvedValue(true);
+    (connectFreighter as jest.Mock).mockResolvedValue("GABCDEFGHIJKLMNOPQRSTUVWXYZ123456");
+    (getFreighterNetwork as jest.Mock).mockResolvedValue("public");
 
     renderWithProvider();
 
     await act(async () => {
       screen.getByRole("button", { name: "Connect" }).click();
-      jest.advanceTimersByTime(1500);
     });
 
     await waitFor(() => {
@@ -317,6 +327,15 @@ describe("WalletProvider", () => {
       })
     );
 
+    let resolveConnect: (value: string) => void = () => {};
+    const connectPromise = new Promise<string>((resolve) => {
+      resolveConnect = resolve;
+    });
+
+    (isFreighterConnected as jest.Mock).mockResolvedValue(true);
+    (connectFreighter as jest.Mock).mockReturnValue(connectPromise);
+    (getFreighterNetwork as jest.Mock).mockResolvedValue("testnet");
+
     renderWithProvider();
 
     await waitFor(() => {
@@ -329,5 +348,13 @@ describe("WalletProvider", () => {
 
     expect(screen.getByTestId("wallet-state")).toHaveTextContent(WALLET_STATES.CONNECTING);
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
+
+    await act(async () => {
+      resolveConnect("GABCDEFGHIJKLMNOPQRSTUVWXYZ123456");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("wallet-state")).toHaveTextContent(WALLET_STATES.CONNECTED);
+    });
   });
 });

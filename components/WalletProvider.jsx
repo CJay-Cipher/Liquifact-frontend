@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { ToastContext } from "./ToastProvider";
+import { isFreighterConnected, connectFreighter, getFreighterNetwork } from "../lib/wallet/freighter";
 
 /**
  * Read the toast API when available. Returns null when WalletProvider is
@@ -170,6 +171,7 @@ export { WalletContext };
 export function WalletProvider({ children }) {
   const [state, setState] = useState(WALLET_STATES.DISCONNECTED);
   const [walletData, setWalletData] = useState(null);
+  const [error, setError] = useState(null);
   const skipPersistRef = useRef(true);
   const toast = useOptionalToast();
 
@@ -206,65 +208,74 @@ export function WalletProvider({ children }) {
     }
   }, [state, walletData]);
 
-  const connect = useCallback(() => {
-    return new Promise((resolve) => {
-      setState(WALLET_STATES.CONNECTING);
+  const connect = useCallback(async () => {
+    setState(WALLET_STATES.CONNECTING);
+    setError(null);
 
-      setTimeout(() => {
-        const scenarios = ["success", "error", "wrong_network", "no_wallet"];
-        const scenario = scenarios[Math.floor(Math.random() * scenarios.length)];
+    try {
+      const isInstalled = await isFreighterConnected();
+      if (!isInstalled) {
+        setState(WALLET_STATES.NO_WALLET);
+        setWalletData(null);
+        toast?.error("No Stellar wallet detected. Install one to continue.", "No wallet");
+        return {
+          outcome: "no_wallet",
+          message: "No Stellar wallet detected. Install one to continue.",
+        };
+      }
 
-        switch (scenario) {
-          case "success":
-            setState(WALLET_STATES.CONNECTED);
-            setWalletData(MOCK_WALLET_DATA);
-            toast?.success("Wallet connected successfully.", "Wallet connected");
-            resolve({ outcome: "success" });
-            break;
-          case "error":
-            setState(WALLET_STATES.ERROR);
-            setWalletData(null);
-            toast?.error("Failed to connect to wallet. Please try again.", "Connection failed");
-            resolve({
-              outcome: "error",
-              message: "Failed to connect to wallet. Please try again.",
-            });
-            break;
-          case "wrong_network":
-            setState(WALLET_STATES.WRONG_NETWORK);
-            setWalletData(null);
-            toast?.error(
-              "Wallet is connected to testnet. Please switch to public network.",
-              "Wrong network"
-            );
-            resolve({
-              outcome: "wrong_network",
-              message: "Wallet is connected to testnet. Please switch to public network.",
-            });
-            break;
-          case "no_wallet":
-            setState(WALLET_STATES.NO_WALLET);
-            setWalletData(null);
-            toast?.error("No Stellar wallet detected. Install one to continue.", "No wallet");
-            resolve({
-              outcome: "no_wallet",
-              message: "No Stellar wallet detected. Install one to continue.",
-            });
-            break;
-        }
-      }, 1500);
-    });
+      const address = await connectFreighter();
+      const network = await getFreighterNetwork();
+      const expectedNetwork = process.env.NEXT_PUBLIC_STELLAR_NETWORK || 'testnet';
+
+      if (network !== expectedNetwork.toLowerCase()) {
+        setState(WALLET_STATES.WRONG_NETWORK);
+        setWalletData(null);
+        const errMsg = `Wallet is connected to ${network}. Please switch to ${expectedNetwork} network.`;
+        setError(errMsg);
+        toast?.error(
+          `Wallet is connected to ${network}. Please switch to ${expectedNetwork} network.`,
+          "Wrong network"
+        );
+        return {
+          outcome: "wrong_network",
+          message: errMsg,
+        };
+      }
+
+      setState(WALLET_STATES.CONNECTED);
+      const data = {
+        address,
+        network,
+        balance: "1,234.56 XLM",
+        walletType: "freighter"
+      };
+      setWalletData(data);
+      toast?.success("Wallet connected successfully.", "Wallet connected");
+      return { outcome: "success" };
+    } catch (err) {
+      setState(WALLET_STATES.ERROR);
+      setWalletData(null);
+      const errMsg = err.message || "Failed to connect to wallet. Please try again.";
+      setError(errMsg);
+      toast?.error(errMsg, "Connection failed");
+      return {
+        outcome: "error",
+        message: errMsg,
+      };
+    }
   }, [toast]);
 
   const disconnect = useCallback(() => {
     setState(WALLET_STATES.DISCONNECTED);
     setWalletData(null);
+    setError(null);
     clearStoredSnapshot();
   }, []);
 
   const value = useMemo(
-    () => ({ state, walletData, connect, disconnect }),
-    [state, walletData, connect, disconnect]
+    () => ({ state, walletData, error, connect, disconnect }),
+    [state, walletData, error, connect, disconnect]
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
